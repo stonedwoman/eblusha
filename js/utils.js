@@ -1,7 +1,18 @@
 /* ===== Утилы ===== */
 export const $  = (s)=>document.querySelector(s);
 export const byId = (id)=>document.getElementById(id);
-export const isMobileView = ()=> matchMedia('(max-width:640px)').matches;
+
+// простая проверка "мобилка" (портрет до 640px или landscape до 950px)
+export function isMobileView(){
+  const narrow = window.matchMedia('(max-width: 640px)').matches;
+  const mobileLandscape = window.matchMedia('(max-width: 950px) and (hover: none) and (pointer: coarse)').matches;
+  return narrow || mobileLandscape;
+}
+
+// отдельный хелпер именно для landscape-мобилы
+export function isMobileLandscape(){
+  return window.matchMedia('(max-width: 950px) and (hover: none) and (pointer: coarse) and (orientation: landscape)').matches;
+}
 
 export function hashColor(name){
   let h=0;
