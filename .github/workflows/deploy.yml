@@ -25,6 +25,11 @@ jobs:
           rsync -avz --delete --ignore-times \
             -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}
+      - name: Debug secrets
+        run: |
+          echo "USER=${{ secrets.VPS_USER }}"
+          echo "HOST=${{ secrets.VPS_HOST }}"
+          echo "PATH=${{ secrets.VPS_PATH }}"
 
       - name: Verify files on VPS
         run: |
