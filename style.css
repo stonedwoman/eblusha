@@ -232,10 +232,6 @@
 
     #btnShare{ display:none !important; }
   }
-
-  @media (max-width: 1100px){ .tiles-main{grid-template-columns:repeat(3,1fr)} }
-  @media (max-width: 800px){  .tiles-main{grid-template-columns:repeat(2,1fr)} .tiles.spotlight{grid-template-columns:1fr 180px} }
-
   /* ==== Per-tile overlay ==== */
   .tile-ov{ position:fixed; inset:0; z-index:1000; display:none; background:#000; }
   .tile-ov.open{ display:flex; flex-direction:column; }
@@ -259,3 +255,12 @@
   .card h4{ margin:0 0 8px; }
   .cam-preview{ margin-top:8px; aspect-ratio:16/9; border:1px solid var(--line); border-radius:10px; background:var(--bg3); display:grid; place-items:center; overflow:hidden; }
   .cam-preview video{ width:100% !important; height:100% !important; object-fit:cover; }
+
+  @media (min-width: 641px){
+  .tile.me,
+  .tile.has-avatar{
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 16 / 9;
+  }
+}
