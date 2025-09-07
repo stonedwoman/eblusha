@@ -12,6 +12,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install rsync
+        run: sudo apt-get update && sudo apt-get install -y rsync
+
       - name: Setup SSH key
         run: |
           echo "${{ secrets.VPS_SSH_KEY }}" > key.pem
@@ -22,3 +25,8 @@ jobs:
           rsync -avz --delete --ignore-times \
             -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}
+
+      - name: Verify files on VPS
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no \
+          ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "ls -lah ${{ secrets.VPS_PATH }}"
