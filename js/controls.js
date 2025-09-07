@@ -32,7 +32,3 @@ export function setShareButtonMode(){
 
 /* слушаем кастомный сигнал об обновлении UI */
 window.addEventListener("app:refresh-ui", refreshControls);
-
-document.getElementById('btnLeave')?.addEventListener('click', async ()=>{
-  await leaveRoom();
-});
