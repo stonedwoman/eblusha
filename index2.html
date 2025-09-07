@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Еблуша — LiveKit (мобайл: лента, 2-кол. список, per-tile фуллскрин, sfx)</title>
+ <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ЛОГИН -->
+<section id="screen-auth">
+  <div class="auth-card" role="dialog" aria-labelledby="authTitle">
+    <div class="auth-hero">
+      <h1 id="authTitle">Еблуша</h1>
+      <p>На каждый хуй с винтом есть жопа с лабиринтом</p>
+    </div>
+    <form class="auth-form" id="authForm" action="javascript:void(0)">
+      <div class="field"><label class="label" for="name">Ник</label><input id="name" class="input" placeholder="Еблуша" required /></div>
+      <div class="field"><label class="label" for="room">Комната</label><input id="room" class="input" placeholder="123" required /></div>
+      <div class="row"><button id="joinBtn" class="btn primary" type="submit">Войти</button></div>
+    </form>
+  </div>
+</section>
+
+<!-- ПРИЛОЖЕНИЕ -->
+<section id="screen-app" hidden>
+  <aside class="sidebar">
+    <div class="list">
+      <h3>Подключены</h3>
+      <div id="onlineList" aria-live="polite"></div>
+    </div>
+  </aside>
+
+  <div class="stage" id="stage">
+    <div class="topbar">
+      <div class="tag" id="roomTag">Комната</div>
+      <div class="tag" id="usersTag">0 участника</div>
+      <span class="spacer"></span>
+      <button class="icon-btn" id="btnStageFS" title="Во весь экран">⛶</button>
+      <button class="icon-btn" id="btnStageClose" title="Закрыть" hidden>✕</button>
+    </div>
+
+    <div class="tiles" id="tiles">
+      <div class="tiles-main" id="tilesMain"></div>
+      <div class="tiles-rail" id="tilesRail"></div>
+      <div class="tiles-sbar" id="tilesSbar" aria-hidden="true">
+        <div class="track" id="sbarTrack"><div class="thumb" id="sbarThumb"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="foot-swipe" id="footSwipe">
+      <div class="foot-pane">
+        <div class="footer-left">
+          <div class="me-card">
+            <div class="me-row">
+              <div class="me-bigavatar" id="meBigAvatar" style="background:#777">Я</div>
+              <div class="me-info">
+                <div class="name" id="meName">Me</div>
+                <div class="sub"  id="meRoom">#room</div>
+                <div class="me-ping"><span class="dot warn" id="pingDot"></span><span id="mePingVal"></span></div>
+              </div>
+            </div>
+            <div class="me-controls">
+              <button class="me-ctrl" id="btnCam"    title="Камера">📷</button>
+              <button class="me-ctrl" id="btnFacing" title="Развернуть камеру" hidden>🔄</button>
+              <button class="me-ctrl" id="btnMic"    title="Микрофон (M)">🎙️</button>
+              <button class="me-ctrl" id="btnShare"  title="Шарить экран">🖥️</button>
+              <button class="me-ctrl" id="btnSettings" title="Настройки">⚙️</button>
+              
+            </div>
+            <button class="leave-btn" id="btnLeave" title="Выйти из комнаты">Выйти</button>
+          </div>
+        </div>
+      </div>
+      <div class="foot-pane">
+        <div class="footer-right">
+          <div class="chatbox">
+            <div class="chat-log" id="chatLog" aria-live="polite"></div>
+            <form class="chat-input" id="chatForm" action="javascript:void(0)">
+              <input class="input" id="chatInput" placeholder="Написать сообщение… (Enter)" />
+              <button class="btn send" id="chatSend" type="submit">Отправить</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="foot-dots" id="footDots" aria-hidden="true"></div>
+  </div>
+</section>
+
+<!-- Per-tile overlay -->
+<div class="tile-ov" id="tileOverlay" aria-hidden="true">
+  <div class="ov-top">
+    <span class="tag" id="ovName">Имя</span>
+    <button class="ov-close" id="ovClose" title="Закрыть">✕</button>
+  </div>
+  <div class="ov-body"><div class="ov-media" id="ovMedia"></div></div>
+</div>
+
+<!-- Настройки -->
+<div class="modal" id="settingsModal" aria-hidden="true">
+  <div class="modal-backdrop" id="settingsBackdrop"></div>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <header class="modal-head"><h3 id="settingsTitle">Настройки</h3></header>
+    <div class="modal-body">
+      <section class="card">
+        <h4>Аудио — вход</h4>
+        <label class="label" for="micSel">Микрофон</label>
+        <select class="input" id="micSel"></select>
+        <div class="toggles" style="margin-top:6px">
+          <label><input type="checkbox" id="nsChk" checked> Шумоподавление</label>
+          <label><input type="checkbox" id="ecChk" checked> Эхо-компенсация</label>
+          <label><input type="checkbox" id="agcChk" checked> Автогейн</label>
+          <section class="card">
+  <h4>Видео</h4>
+  <!-- твои селекты камер/миков остаются -->
+  <label style="display:block;margin-top:.5rem">
+    <input type="checkbox" id="lowQChk">
+    Экономия трафика (низкое качество подписок)
+  </label>
+</section>
+
+        </div>
+      </section>
+      <section class="card">
+        <h4>Видео</h4>
+        <label class="label" for="camSel">Камера</label>
+        <select class="input" id="camSel"></select>
+        <div class="cam-preview" id="camPreview"><div class="hint" id="camHint">Предпросмотр появится при включении камеры</div></div>
+        <div class="row" style="gap:8px; margin-top:8px">
+          <button class="btn" id="btnCamFlip" type="button">Повернуть 180°</button>
+          <button class="btn" id="btnCamMirror" type="button">Зеркалить</button>
+        </div>
+      </section>
+    </div>
+    <footer class="modal-foot">
+      <button class="btn" id="settingsApply" type="button">Применить</button>
+      <span class="spacer"></span>
+      <button class="btn primary" id="settingsSave" type="button">Сохранить и закрыть</button>
+      <button class="btn" id="settingsClose" type="button">✕ Закрыть</button>
+    </footer>
+  </div>
+</div>
+
+ <script type="module" src="all.js"></script>
+</body>
+</html>
