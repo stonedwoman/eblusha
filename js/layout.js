@@ -167,26 +167,52 @@ export function applyLayout(){
   updateUsersCounter();
 }
 
+/* === УСТОЙЧИВЫЙ рассчёт размера спотлайта на десктопе === */
 export function fitSpotlightSize(){
   if (isMobileView() && !ctx.isStageFull) return;
+
   const main = tilesMain();
+  if (!main) return;
   const tile = main.querySelector('.tile.spotlight');
   if (!tile) return;
 
   const box = main.getBoundingClientRect();
+
+  // 1) Если контейнер ещё не разметился — НЕ трогаем inline-стили вовсе.
+  //    Пускай работает CSS (и наш min-height), а мы попробуем снова чуть позже.
+  if (box.width < 64 || box.height < 64) {
+    tile.style.removeProperty('width');
+    tile.style.removeProperty('height');
+    // повторим попытку: ближайший кадр + через 120 мс
+    requestAnimationFrame(()=>fitSpotlightSize());
+    setTimeout(()=>fitSpotlightSize(), 120);
+    return;
+  }
+
+  // 2) Нормальный расчёт AR
   const ar = tile.classList.contains('portrait') ? (9/16) : (16/9);
 
-  let w = box.width, h = w / ar;
-  if (h > box.height){ h = box.height; w = h * ar; }
+  let w = box.width;
+  let h = w / ar;
+  if (h > box.height) { h = box.height; w = h * ar; }
+
+  // 3) На всякий: никакого 0×0
+  if (w < 64 || h < 64) {
+    tile.style.removeProperty('width');
+    tile.style.removeProperty('height');
+    return;
+  }
 
   tile.style.width  = Math.floor(w) + 'px';
   tile.style.height = Math.floor(h) + 'px';
 }
 
-export function highlightSpeaking(ids){
-  const set=new Set(ids);
-  document.querySelectorAll('.tile').forEach(t=>t.classList.remove('speaking'));
-  set.forEach(id=>{
-    document.querySelector(`.tile[data-pid="${CSS.escape(id)}"]`)?.classList.add('speaking');
-  });
-}
+/* подстраиваем size при изменении контейнера */
+(() => {
+  const m = tilesMain();
+  if (!m) return;
+  try {
+    const ro = new ResizeObserver(()=> fitSpotlightSize());
+    ro.observe(m);
+  } catch {}
+})();
