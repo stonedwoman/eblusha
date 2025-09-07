@@ -4,7 +4,7 @@ import { TOKEN_ENDPOINT } from "./config.js";
 import { connectLiveKit } from "./livekit-connection.js";
 import { sfx } from "./sfx.js";
 import { setShareButtonMode } from "./controls.js";   // будет в следующей пачке
-import { initFootDots } from "./footdots.js";         // будет в следующей пачке
+import { initFootDots } from "./ui-settings-ice-init.js";         // будет в следующей пачке
 
 /* ===== Вход ===== */
 byId('authForm').addEventListener('submit', async (e)=>{ e.preventDefault(); await joinRoom(); });

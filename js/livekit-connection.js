@@ -9,9 +9,9 @@ import { registerParticipant, unregisterParticipant, markHasVideo, recomputeHasV
 import { attachAudioTrack, attachVideoToTile, showAvatarInTile } from "./tiles.js";
 import { applyLayout, highlightSpeaking } from "./layout.js";
 import { refreshControls } from "./controls.js";
-import { wireData } from "./chat.js";
-import { ensureMicOn } from "./mic.js";
-import { startPingLoop } from "./ice.js";
+import { wireData } from "./chat-session.js";
+import { ensureMicOn } from "./media.js";
+import { startPingLoop } from "./ui-settings-ice-init.js";
 
 /* ===== Подключение LiveKit ===== */
 export async function connectLiveKit(token){
