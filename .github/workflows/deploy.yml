@@ -29,4 +29,4 @@ jobs:
       - name: Verify files on VPS
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no \
-          ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "ls -lah ${{ secrets.VPS_PATH }}"
+${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "pwd && whoami && ls -lah /eblusha/web"
