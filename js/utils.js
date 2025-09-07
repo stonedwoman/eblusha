@@ -19,3 +19,9 @@ export function hide(id){
   const el=byId(id);
   if(el){ el.hidden=true; el.style.display='none'; }
 }
+/* корректно выходим из фуллскрина и разблокируем ориентацию */
+export async function exitFullscreenAndUnlock(){
+  try{ if(document.fullscreenElement) await document.exitFullscreen(); }catch{}
+  try{ screen.orientation?.unlock?.(); }catch{}
+  document.body.classList.remove('no-scroll');
+}
