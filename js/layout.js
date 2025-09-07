@@ -24,7 +24,10 @@ export function queueSbarUpdate(){
 
 export function updateMobileScrollbar(forceShow){
   // в landscape мобилы — горизонтального скролла нет, там сетка
-  if(!isMobileView() || isMobileLandscape() || ctx.isStageFull) { sbar?.classList.remove('show'); return; }
+  if(!isMobileView() || isMobileLandscape() || ctx.isStageFull) {
+    sbar?.classList.remove('show');
+    return;
+  }
   const m = tilesMain(); if(!m) return;
 
   const scrollW = m.scrollWidth, viewW = m.clientWidth;
@@ -35,13 +38,13 @@ export function updateMobileScrollbar(forceShow){
   sbar.classList.toggle('show', need);
   if(!need) return;
 
-  const trackW = sbarTrack.clientWidth;
-  const minThumb = 28;
-  const thumbW = Math.max(minThumb, Math.round((viewW/scrollW) * trackW));
+  const trackW  = sbarTrack.clientWidth;
+  const minTh   = 28;
+  const thumbW  = Math.max(minTh, Math.round((viewW/scrollW) * trackW));
   const maxLeft = Math.max(0, trackW - thumbW);
-  const left = maxLeft ? Math.round((m.scrollLeft / (scrollW - viewW)) * maxLeft) : 0;
+  const left    = maxLeft ? Math.round((m.scrollLeft / (scrollW - viewW)) * maxLeft) : 0;
 
-  sbarThumb.style.width = thumbW + 'px';
+  sbarThumb.style.width     = thumbW + 'px';
   sbarThumb.style.transform = `translateX(${left}px)`;
 
   if(forceShow){
@@ -55,41 +58,39 @@ export function updateMobileScrollbar(forceShow){
 }
 
 tilesMain().addEventListener('scroll', ()=> updateMobileScrollbar(false), {passive:true});
-window.addEventListener('resize', ()=> updateMobileScrollbar(false));
+window.addEventListener('resize',  ()=> updateMobileScrollbar(false));
 
 function sbarSetScrollByThumbX(px){
   const m = tilesMain();
-  const trackW = sbarTrack.clientWidth;
-  const thumbW = sbarThumb.clientWidth;
+  const trackW  = sbarTrack.clientWidth;
+  const thumbW  = sbarThumb.clientWidth;
   const maxLeft = Math.max(0, trackW - thumbW);
-  const clamped = Math.max(0, Math.min(maxLeft, px));
-  const ratio = maxLeft ? (clamped / maxLeft) : 0;
-  const maxScroll = m.scrollWidth - m.clientWidth;
-  m.scrollLeft = ratio * maxScroll;
+  const clamp   = Math.max(0, Math.min(maxLeft, px));
+  const ratio   = maxLeft ? (clamp / maxLeft) : 0;
+  const maxScr  = m.scrollWidth - m.clientWidth;
+  m.scrollLeft = ratio * maxScr;
   updateMobileScrollbar(false);
 }
 
 function startSbarDrag(clientX){
   sbar.classList.add('dragging');
   const rect = sbarTrack.getBoundingClientRect();
-  const thumbRect = sbarThumb.getBoundingClientRect();
-  sbarDrag = { startX: clientX, startLeft: thumbRect.left - rect.left };
+  const th   = sbarThumb.getBoundingClientRect();
+  sbarDrag = { startX: clientX, startLeft: th.left - rect.left };
 }
 function moveSbarDrag(clientX){
   if(!sbarDrag) return;
-  const rect = sbarTrack.getBoundingClientRect();
+  const rect  = sbarTrack.getBoundingClientRect();
   const delta = clientX - sbarDrag.startX;
   sbarSetScrollByThumbX(sbarDrag.startLeft + delta);
 }
-function endSbarDrag(){
-  sbar.classList.remove('dragging');
-  sbarDrag=null;
-}
+function endSbarDrag(){ sbar.classList.remove('dragging'); sbarDrag=null; }
+
 sbarThumb.addEventListener('mousedown', (e)=>{ e.preventDefault(); startSbarDrag(e.clientX); });
 document.addEventListener('mousemove', (e)=>{ if(sbarDrag) moveSbarDrag(e.clientX); });
 document.addEventListener('mouseup', endSbarDrag);
 sbarThumb.addEventListener('touchstart', (e)=>{ startSbarDrag(e.touches[0].clientX); }, {passive:true});
-document.addEventListener('touchmove', (e)=>{ if(sbarDrag) moveSbarDrag(e.touches[0].clientX); }, {passive:true});
+document.addEventListener('touchmove',  (e)=>{ if(sbarDrag) moveSbarDrag(e.touches[0].clientX); }, {passive:true});
 document.addEventListener('touchend', endSbarDrag);
 sbarTrack.addEventListener('mousedown', (e)=>{
   if(e.target===sbarThumb) return;
@@ -141,6 +142,8 @@ export function applyLayout(){
     // в landscape — равномерная сетка, в портретной мобилке — горизонтальная лента + скроллбар
     if (isMobileLandscape()){
       applyEqualGrid();
+      // центрируем карусель на «Настройки» (средняя панель)
+      if (mqLand.matches) scrollFootSwipeToPane(1, 'instant');
     } else {
       updateMobileScrollbar(true);
     }
@@ -149,7 +152,7 @@ export function applyLayout(){
 
   // --- Десктопный режим со спотлайтом и рейлом ---
   const spotlightId = chooseAutoSpotlight();
-  const totalTiles = document.querySelectorAll('.tile').length;
+  const totalTiles  = document.querySelectorAll('.tile').length;
 
   tiles.classList.add('spotlight');
   tiles.classList.toggle('single', totalTiles<=1);
@@ -183,7 +186,7 @@ export function fitSpotlightSize(){
   if (!tile) return;
 
   const box = main.getBoundingClientRect();
-  const ar = tile.classList.contains('portrait') ? (9/16) : (16/9);
+  const ar  = tile.classList.contains('portrait') ? (9/16) : (16/9);
 
   let w = box.width, h = w / ar;
   if (h > box.height){ h = box.height; w = h * ar; }
@@ -219,7 +222,7 @@ function applyEqualGrid(){
   if (W < 10 || H < 10) { requestAnimationFrame(applyEqualGrid); return; }
 
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
-  const AR = 16/9;
+  const AR  = 16/9;
 
   let best = { area: -1, cols: 1, rows: N, cellW: 0, cellH: 0 };
 
@@ -229,7 +232,7 @@ function applyEqualGrid(){
     const wAvail = W - gap * (cols - 1);
     const hAvail = H - gap * (rows - 1);
 
-    // ограничение по ширине
+    // по ширине
     let cellW = Math.floor(wAvail / cols);
     let cellH = Math.floor(cellW / AR);
     if (rows * cellH <= hAvail && cellW > 0 && cellH > 0){
@@ -237,7 +240,7 @@ function applyEqualGrid(){
       if (area > best.area) best = { area, cols, rows, cellW, cellH };
     }
 
-    // ограничение по высоте
+    // по высоте
     cellH = Math.floor(hAvail / rows);
     cellW = Math.floor(cellH * AR);
     if (cols * cellW <= wAvail && cellW > 0 && cellH > 0){
@@ -251,31 +254,46 @@ function applyEqualGrid(){
 }
 
 // пересчёт сетки при изменении размеров/ориентации
-window.addEventListener('resize', ()=> { if (isMobileLandscape()) applyEqualGrid(); }, { passive:true });
-window.addEventListener('orientationchange', ()=> { if (isMobileLandscape()) setTimeout(applyEqualGrid, 60); });
+window.addEventListener('resize',          ()=> { if (isMobileLandscape()) applyEqualGrid(); }, { passive:true });
+window.addEventListener('orientationchange',()=> { if (isMobileLandscape()) setTimeout(applyEqualGrid, 60); });
 
 /* ========================================================================== */
-/* === Перенос «Подключены» в карусель foot-swipe на моб. landscape ========= */
+/* === Перенос в карусель и порядок панелей: [0] Подключены, [1] Настройки, [2] Чат === */
 /* ========================================================================== */
 
 const mqLand = window.matchMedia('(max-width: 950px) and (hover: none) and (pointer: coarse) and (orientation: landscape)');
 let sidebarMounted = false;
 let sidebarPlaceholder = null;
 
+function getFootSwipe(){ return document.querySelector('.foot-swipe'); }
+function getFootPanes(){
+  const fs = getFootSwipe();
+  return fs ? Array.from(fs.querySelectorAll('.foot-pane')) : [];
+}
+function scrollFootSwipeToPane(idx, behavior = 'instant'){
+  const fs = getFootSwipe();
+  const panes = getFootPanes();
+  if (!fs || !panes[idx]) return;
+  fs.scrollTo({ left: panes[idx].offsetLeft, behavior });
+}
+
+/** Вставить «Подключены» как ПЕРВУЮ панель (слева) */
 function mountSidebarIntoFootSwipe(){
   if (sidebarMounted) return;
-  const sidebar = document.querySelector('.sidebar');
-  const footSwipe = document.querySelector('.foot-swipe');
+
+  const sidebar   = document.querySelector('.sidebar');
+  const footSwipe = getFootSwipe();
   if (!sidebar || !footSwipe) return;
 
   const list = sidebar.querySelector('.list') || sidebar.querySelector('#onlineList');
   if (!list) return;
 
-  // плейсхолдер для возврата
+  // плейсхолдер, чтобы вернуть на место
   sidebarPlaceholder = document.createElement('div');
   sidebarPlaceholder.className = 'sidebar-placeholder';
   list.parentElement.insertBefore(sidebarPlaceholder, list);
 
+  // создаём панель «Подключены»
   const pane = document.createElement('div');
   pane.className = 'foot-pane sidebar-pane';
 
@@ -283,36 +301,76 @@ function mountSidebarIntoFootSwipe(){
   title.textContent = 'Подключены';
   title.style.cssText = 'margin:0 0 10px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;';
 
-  // оборачиваем чтобы стили .list применялись как в aside
   const wrapper = document.createElement('div');
   wrapper.className = 'list';
   wrapper.appendChild(list);
 
   pane.appendChild(title);
   pane.appendChild(wrapper);
-  footSwipe.prepend(pane);
+
+  // слева (первой панелью)
+  footSwipe.insertBefore(pane, footSwipe.firstChild);
 
   sidebarMounted = true;
+
+  // упорядочим панели и откроем «Настройки» по центру
+  ensureFootSwipeOrder();
+  scrollFootSwipeToPane(1, 'instant');
 }
 
+/** Вернуть список на место и убрать панель из карусели */
 function unmountSidebarFromFootSwipe(){
   if (!sidebarMounted) return;
+
   const pane = document.querySelector('.foot-pane.sidebar-pane');
   const list = pane?.querySelector('.list > .list, .list > #onlineList') || pane?.querySelector('.list');
   if (list && sidebarPlaceholder && sidebarPlaceholder.parentElement) {
     sidebarPlaceholder.parentElement.replaceChild(list, sidebarPlaceholder);
   }
   pane?.remove();
+
   sidebarMounted = false;
   sidebarPlaceholder = null;
 }
 
+/** Порядок: [Подключены][Настройки][Чат] */
+function ensureFootSwipeOrder(){
+  const fs = getFootSwipe();
+  if (!fs) return;
+
+  const panes = getFootPanes();
+  if (!panes.length) return;
+
+  const sidebarPane = fs.querySelector('.foot-pane.sidebar-pane');
+  const rest = panes.filter(p => p !== sidebarPane);
+  if (!rest.length) return;
+
+  const settingsPane = rest[0]; // карточка «Я / Настройки»
+  const chatPane     = rest[1] || null;
+
+  if (sidebarPane) fs.appendChild(sidebarPane);
+  if (settingsPane) fs.appendChild(settingsPane);
+  if (chatPane)     fs.appendChild(chatPane);
+
+  if (sidebarPane) fs.insertBefore(sidebarPane, fs.firstChild);     // слева
+  if (settingsPane) fs.insertBefore(settingsPane, chatPane || null);// середина
+  // chatPane остаётся справа
+}
+
+/** Реакция на вход/выход из landscape-режима */
 function handleSidebarRelocation(){
-  if (mqLand.matches) mountSidebarIntoFootSwipe();
-  else unmountSidebarFromFootSwipe();
+  if (mqLand.matches){
+    mountSidebarIntoFootSwipe();
+    setTimeout(()=> scrollFootSwipeToPane(1, 'instant'), 60);
+  } else {
+    unmountSidebarFromFootSwipe();
+  }
 }
 
 handleSidebarRelocation();
 mqLand.addEventListener?.('change', handleSidebarRelocation);
 window.addEventListener('orientationchange', handleSidebarRelocation);
-window.addEventListener('resize', handleSidebarRelocation);
+window.addEventListener('resize', () => {
+  handleSidebarRelocation();
+  if (mqLand.matches) scrollFootSwipeToPane(1, 'instant');
+});
