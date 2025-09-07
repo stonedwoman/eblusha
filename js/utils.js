@@ -11,11 +11,14 @@ export function hashColor(name){
 }
 
 export function show(id){
-  const el=byId(id);
-  if(el){ el.hidden=false; el.style.display=(id==='screen-app'?'grid':'block'); }
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.hidden = false;               // этого достаточно, hidden убирает display:none
+  el.style.removeProperty('display'); // снять возможный inline display
 }
 
 export function hide(id){
-  const el=byId(id);
-  if(el){ el.hidden=true; el.style.display='none'; }
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.hidden = true;                // браузер сам применит display:none
 }
