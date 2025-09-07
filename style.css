@@ -259,12 +259,3 @@
   .card h4{ margin:0 0 8px; }
   .cam-preview{ margin-top:8px; aspect-ratio:16/9; border:1px solid var(--line); border-radius:10px; background:var(--bg3); display:grid; place-items:center; overflow:hidden; }
   .cam-preview video{ width:100% !important; height:100% !important; object-fit:cover; }
-
-  @media (min-width: 641px){
-  .tile.me,
-  .tile.has-avatar{
-    width: 100% !important;
-    height: auto !important;
-    aspect-ratio: 16 / 9;
-  }
-}
