@@ -1,5 +1,5 @@
 import { ctx } from "./state.js";
-import { byId, isMobileView } from "./utils.js";
+import { byId, isMobileView, isMobileLandscape } from "./utils.js";
 import { createTileEl, tilesMain, tilesRail } from "./tiles.js";
 import { usersCounterText } from "./registry.js";
 
@@ -9,7 +9,7 @@ export function updateUsersCounter(){
   byId('usersTag').textContent = usersCounterText();
 }
 
-/* --- mobile scrollbar --- */
+/* --- mobile scrollbar (для портретной мобилки) --- */
 const sbar      = byId('tilesSbar');
 const sbarTrack = byId('sbarTrack');
 const sbarThumb = byId('sbarThumb');
@@ -23,7 +23,8 @@ export function queueSbarUpdate(){
 }
 
 export function updateMobileScrollbar(forceShow){
-  if(!isMobileView() || ctx.isStageFull) { sbar?.classList.remove('show'); return; }
+  // в landscape мобилы — горизонтального скролла нет, там сетка
+  if(!isMobileView() || isMobileLandscape() || ctx.isStageFull) { sbar?.classList.remove('show'); return; }
   const m = tilesMain(); if(!m) return;
 
   const scrollW = m.scrollWidth, viewW = m.clientWidth;
@@ -136,10 +137,17 @@ export function applyLayout(){
       if (t.parentElement !== main) main.appendChild(t);
     });
     updateUsersCounter();
-    updateMobileScrollbar(true);
+
+    // в landscape — равномерная сетка, в портретной мобилке — горизонтальная лента + скроллбар
+    if (isMobileLandscape()){
+      applyEqualGrid();
+    } else {
+      updateMobileScrollbar(true);
+    }
     return;
   }
 
+  // --- Десктопный режим со спотлайтом и рейлом ---
   const spotlightId = chooseAutoSpotlight();
   const totalTiles = document.querySelectorAll('.tile').length;
 
@@ -167,6 +175,7 @@ export function applyLayout(){
   updateUsersCounter();
 }
 
+/* === Подгон размера спотлайта на десктопе === */
 export function fitSpotlightSize(){
   if (isMobileView() && !ctx.isStageFull) return;
   const main = tilesMain();
@@ -183,6 +192,7 @@ export function fitSpotlightSize(){
   tile.style.height = Math.floor(h) + 'px';
 }
 
+/* === Подсветка активных спикеров === */
 export function highlightSpeaking(ids){
   const set=new Set(ids);
   document.querySelectorAll('.tile').forEach(t=>t.classList.remove('speaking'));
@@ -190,3 +200,119 @@ export function highlightSpeaking(ids){
     document.querySelector(`.tile[data-pid="${CSS.escape(id)}"]`)?.classList.add('speaking');
   });
 }
+
+/* ========================================================================== */
+/* === MOBILE LANDSCAPE: равномерная сетка одинаковых 16:9 тайлов =========== */
+/* ========================================================================== */
+
+function applyEqualGrid(){
+  const m = tilesMain();
+  if (!m) return;
+
+  const tiles = m.querySelectorAll('.tile');
+  const N = tiles.length;
+  if (!N) return;
+
+  const box = m.getBoundingClientRect();
+  const W = Math.max(0, box.width);
+  const H = Math.max(0, box.height);
+  if (W < 10 || H < 10) { requestAnimationFrame(applyEqualGrid); return; }
+
+  const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
+  const AR = 16/9;
+
+  let best = { area: -1, cols: 1, rows: N, cellW: 0, cellH: 0 };
+
+  for (let cols = 1; cols <= N; cols++){
+    const rows = Math.ceil(N / cols);
+
+    const wAvail = W - gap * (cols - 1);
+    const hAvail = H - gap * (rows - 1);
+
+    // ограничение по ширине
+    let cellW = Math.floor(wAvail / cols);
+    let cellH = Math.floor(cellW / AR);
+    if (rows * cellH <= hAvail && cellW > 0 && cellH > 0){
+      const area = cellW * cellH;
+      if (area > best.area) best = { area, cols, rows, cellW, cellH };
+    }
+
+    // ограничение по высоте
+    cellH = Math.floor(hAvail / rows);
+    cellW = Math.floor(cellH * AR);
+    if (cols * cellW <= wAvail && cellW > 0 && cellH > 0){
+      const area = cellW * cellH;
+      if (area > best.area) best = { area, cols, rows, cellW, cellH };
+    }
+  }
+
+  m.style.setProperty('--grid-cols', String(best.cols));
+  m.style.setProperty('--cell-h', `${best.cellH}px`);
+}
+
+// пересчёт сетки при изменении размеров/ориентации
+window.addEventListener('resize', ()=> { if (isMobileLandscape()) applyEqualGrid(); }, { passive:true });
+window.addEventListener('orientationchange', ()=> { if (isMobileLandscape()) setTimeout(applyEqualGrid, 60); });
+
+/* ========================================================================== */
+/* === Перенос «Подключены» в карусель foot-swipe на моб. landscape ========= */
+/* ========================================================================== */
+
+const mqLand = window.matchMedia('(max-width: 950px) and (hover: none) and (pointer: coarse) and (orientation: landscape)');
+let sidebarMounted = false;
+let sidebarPlaceholder = null;
+
+function mountSidebarIntoFootSwipe(){
+  if (sidebarMounted) return;
+  const sidebar = document.querySelector('.sidebar');
+  const footSwipe = document.querySelector('.foot-swipe');
+  if (!sidebar || !footSwipe) return;
+
+  const list = sidebar.querySelector('.list') || sidebar.querySelector('#onlineList');
+  if (!list) return;
+
+  // плейсхолдер для возврата
+  sidebarPlaceholder = document.createElement('div');
+  sidebarPlaceholder.className = 'sidebar-placeholder';
+  list.parentElement.insertBefore(sidebarPlaceholder, list);
+
+  const pane = document.createElement('div');
+  pane.className = 'foot-pane sidebar-pane';
+
+  const title = document.createElement('h3');
+  title.textContent = 'Подключены';
+  title.style.cssText = 'margin:0 0 10px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;';
+
+  // оборачиваем чтобы стили .list применялись как в aside
+  const wrapper = document.createElement('div');
+  wrapper.className = 'list';
+  wrapper.appendChild(list);
+
+  pane.appendChild(title);
+  pane.appendChild(wrapper);
+  footSwipe.prepend(pane);
+
+  sidebarMounted = true;
+}
+
+function unmountSidebarFromFootSwipe(){
+  if (!sidebarMounted) return;
+  const pane = document.querySelector('.foot-pane.sidebar-pane');
+  const list = pane?.querySelector('.list > .list, .list > #onlineList') || pane?.querySelector('.list');
+  if (list && sidebarPlaceholder && sidebarPlaceholder.parentElement) {
+    sidebarPlaceholder.parentElement.replaceChild(list, sidebarPlaceholder);
+  }
+  pane?.remove();
+  sidebarMounted = false;
+  sidebarPlaceholder = null;
+}
+
+function handleSidebarRelocation(){
+  if (mqLand.matches) mountSidebarIntoFootSwipe();
+  else unmountSidebarFromFootSwipe();
+}
+
+handleSidebarRelocation();
+mqLand.addEventListener?.('change', handleSidebarRelocation);
+window.addEventListener('orientationchange', handleSidebarRelocation);
+window.addEventListener('resize', handleSidebarRelocation);
