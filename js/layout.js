@@ -293,11 +293,53 @@ window.addEventListener('orientationchange', ()=> { if (isLandscapeMobileNow()) 
 let sidebarMounted = false;
 let sidebarPlaceholder = null;
 
+/* состояние карусели */
+let footSwipeInitialized = false; // первый вход в landscape
+let activePaneIdx = 1;            // стартуем с «me/Настройки» (средняя панель)
+
+/* утилиты */
 function getFootSwipe(){ return document.querySelector('.foot-swipe'); }
 function getFootPanes(){
   const fs = getFootSwipe();
   return fs ? Array.from(fs.querySelectorAll('.foot-pane')) : [];
 }
+
+/* сохраняем/восстанавливаем scrollLeft, чтобы не уезжать на правую панель */
+function withPreservedFsScroll(fn){
+  const fs = getFootSwipe();
+  if(!fs){ fn(); return; }
+  const left = fs.scrollLeft;
+  fn();
+  requestAnimationFrame(()=> { fs.scrollLeft = left; });
+}
+
+/* вычислить активную панель по центру видимой области */
+function detectActivePaneIdx(){
+  const fs = getFootSwipe(); const panes = getFootPanes();
+  if(!fs || !panes.length) return activePaneIdx;
+  const center = fs.scrollLeft + fs.clientWidth / 2;
+  let best = 0, bestDist = Infinity;
+  panes.forEach((p, i)=>{
+    const pc = p.offsetLeft + p.clientWidth / 2;
+    const d = Math.abs(center - pc);
+    if(d < bestDist){ bestDist = d; best = i; }
+  });
+  return best;
+}
+
+/* следим за скроллом пользователя и обновляем activePaneIdx */
+function attachFsScrollWatcher(){
+  const fs = getFootSwipe();
+  if(!fs || fs.__watching) return;
+  fs.__watching = true;
+  let t = null;
+  fs.addEventListener('scroll', ()=> {
+    if(t) return;
+    t = setTimeout(()=>{ activePaneIdx = detectActivePaneIdx(); t = null; }, 120);
+  }, { passive:true });
+}
+
+/* аккуратно скроллим к нужной панели */
 function scrollFootSwipeToPane(idx, behavior = 'instant'){
   const fs = getFootSwipe();
   const panes = getFootPanes();
@@ -337,13 +379,22 @@ function mountSidebarIntoFootSwipe(){
   pane.appendChild(wrapper);
 
   // слева (первой панелью)
-  footSwipe.insertBefore(pane, footSwipe.firstChild);
+  withPreservedFsScroll(()=> {
+    footSwipe.insertBefore(pane, footSwipe.firstChild);
+  });
 
   sidebarMounted = true;
 
-  // упорядочим панели и откроем «Настройки» по центру
+  // упорядочим панели (без потери scrollLeft) и подключим watcher
   ensureFootSwipeOrder();
-  scrollFootSwipeToPane(1, 'instant');
+  attachFsScrollWatcher();
+
+  // первый вход в landscape — выставляем стартовую панель «me»
+  if (!footSwipeInitialized){
+    activePaneIdx = 1; // «Настройки/Me»
+    scrollFootSwipeToPane(activePaneIdx, 'instant');
+    footSwipeInitialized = true;
+  }
 }
 
 /** Вернуть список на место и убрать панель из карусели */
@@ -359,9 +410,10 @@ function unmountSidebarFromFootSwipe(){
 
   sidebarMounted = false;
   sidebarPlaceholder = null;
+  footSwipeInitialized = false; // при выходе из режима сбросим флаг и дадим стартовать заново с me
 }
 
-/** Порядок: [Подключены][Настройки][Чат] */
+/** Порядок: [Подключены][Настройки][Чат] — без сдвига текущего скролла */
 function ensureFootSwipeOrder(){
   const fs = getFootSwipe();
   if (!fs) return;
@@ -376,30 +428,35 @@ function ensureFootSwipeOrder(){
   const settingsPane = rest[0]; // карточка «Я / Настройки»
   const chatPane     = rest[1] || null;
 
-  if (sidebarPane) fs.appendChild(sidebarPane);
-  if (settingsPane) fs.appendChild(settingsPane);
-  if (chatPane)     fs.appendChild(chatPane);
-
-  if (sidebarPane) fs.insertBefore(sidebarPane, fs.firstChild);     // слева
-  if (settingsPane) fs.insertBefore(settingsPane, chatPane || null);// середина
-  // chatPane остаётся справа
+  withPreservedFsScroll(()=> {
+    if (sidebarPane) fs.insertBefore(sidebarPane, fs.firstChild);     // слева
+    if (settingsPane) fs.insertBefore(settingsPane, chatPane || null);// середина
+    // chatPane остаётся справа
+  });
 }
 
 /** Реакция на вход/выход из landscape-режима */
 function handleSidebarRelocation(){
   if (isLandscapeMobileNow()){
     mountSidebarIntoFootSwipe();
-    setTimeout(()=> scrollFootSwipeToPane(1, 'instant'), 60);
+    // если уже инициализировались и пользователь выбрал панель — оставляем как есть
+    if (!footSwipeInitialized){
+      activePaneIdx = 1;
+      scrollFootSwipeToPane(activePaneIdx, 'instant');
+      footSwipeInitialized = true;
+    }
   } else {
     unmountSidebarFromFootSwipe();
   }
 }
 
 handleSidebarRelocation();
+
+/* события окружения */
 mqLand.addEventListener?.('change', handleSidebarRelocation);
 window.matchMedia('(orientation: landscape)').addEventListener?.('change', handleSidebarRelocation);
 window.addEventListener('orientationchange', handleSidebarRelocation);
 window.addEventListener('resize', () => {
+  // только перераскладываем, но НЕ переезжаем на другую панель
   handleSidebarRelocation();
-  if (isLandscapeMobileNow()) scrollFootSwipeToPane(1, 'instant');
 });
