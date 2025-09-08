@@ -99,7 +99,7 @@ body.no-scroll{overflow:hidden}
 .dot.ok{background:var(--success)} .dot.warn{background:var(--warning)} .dot.bad{background:var(--danger)} .dot.off{background:#555}
 
 .footer-right{padding:12px;display:flex;min-height:0;min-width: 100%;}
-.chatbox{display:grid; grid-template-rows:1fr auto; gap:8px; width:100%; margin:0; min-height:0}
+.chatbox{display:grid; grid-template-rows:1fr auto; gap:8px; width:100%; margin:0; min-height:0; max-height: 234px;}
 .chat-log{min-height:0; max-height:256px; overflow:auto; padding:8px; border:1px solid var(--line); background:var(--bg3); border-radius:12px}
 .chat-row{display:flex; flex-direction:row; margin-bottom:8px}
 .bubble{padding:0 5px}
