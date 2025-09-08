@@ -27,6 +27,7 @@ button,input,select,textarea{font:inherit}
 .row{display:flex; gap:10px}
 .btn{display: flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:10px;cursor:pointer}
 .btn.primary{margin-top:10px; width:-webkit-fill-available; background:var(--accent); border-color:transparent}
+.btn.send{display:none}
 .hint{color:var(--muted); font-size:12px}
 
 /* App layout (desktop base) */
