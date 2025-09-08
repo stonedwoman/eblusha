@@ -42,7 +42,7 @@
     border:1px solid var(--line);
     border-radius:var(--radius);
     background:var(--panel);
-    min-height: -webkit-fill-available;
+    min-height: 46vh;
   }
 
   .btn.send{ display:block; width:100%; }
