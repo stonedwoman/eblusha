@@ -290,31 +290,45 @@ window.addEventListener('orientationchange', ()=> { if (isLandscapeMobileNow()) 
 /* === Перенос в карусель и порядок панелей: [0] Подключены, [1] Настройки, [2] Чат === */
 /* ========================================================================== */
 
+const mqLand = window.matchMedia('(max-width: 950px) and (hover: none) and (pointer: coarse) and (orientation: landscape)');
+const isLandscapeMobileNow = () => mqLand.matches;
+
 let sidebarMounted = false;
 let sidebarPlaceholder = null;
 
+/* состояние карусели */
 let footSwipeInitialized = false; // первый вход в landscape
-let activePaneIdx = 1;            // стартуем с «me/Настройки»
-let initSuppressed = false;       // блокируем watcher во время первичной прокрутки
+let activePaneIdx = 1;            // стартовая панель — «me/Настройки»
+let initSuppressed = false;       // не фиксировать активную панель во время первичного автоскролла
 let fsResizeObs = null;
 
+/* утилиты */
 function getFootSwipe(){ return document.querySelector('.foot-swipe'); }
 function getFootPanes(){
   const fs = getFootSwipe();
   return fs ? Array.from(fs.querySelectorAll('.foot-pane')) : [];
 }
 
-/* аккуратно скроллим к активной панели и повторяем на ближайших тиках */
+/* ШИМ совместимости: старые вызовы продолжают работать */
+function scrollFootSwipeToPane(idx, behavior = 'instant'){
+  activePaneIdx = Math.max(0, Math.min(idx, getFootPanes().length - 1));
+  alignToActivePane(behavior);
+}
+
+/* аккуратный скролл к активной панели с «подтяжкой» после релоевта */
 function alignToActivePane(behavior = 'instant'){
   const fs = getFootSwipe(); const panes = getFootPanes();
-  if (!fs || !panes[activePaneIdx]) return;
-  const left = panes[activePaneIdx].offsetLeft;
+  if (!fs || !panes.length) return;
+  const target = panes[Math.max(0, Math.min(activePaneIdx, panes.length - 1))];
+  if (!target) return;
+
+  const left = target.offsetLeft;
   fs.scrollTo({ left, behavior });
   requestAnimationFrame(()=> fs.scrollTo({ left, behavior:'instant' }));
   setTimeout(()=> fs.scrollTo({ left, behavior:'instant' }), 60);
 }
 
-/* вычислить индекс панели, которая ближе к центру вьюпорта */
+/* вычислить индекс панели ближе к центру */
 function detectActivePaneIdx(){
   const fs = getFootSwipe(); const panes = getFootPanes();
   if(!fs || !panes.length) return activePaneIdx;
@@ -328,7 +342,7 @@ function detectActivePaneIdx(){
   return best;
 }
 
-/* следим за скроллом пользователя, но не во время первичной прокрутки */
+/* следим за скроллом пользователя */
 function attachFsScrollWatcher(){
   const fs = getFootSwipe();
   if(!fs || fs.__watching) return;
@@ -341,7 +355,7 @@ function attachFsScrollWatcher(){
   }, { passive:true });
 }
 
-/* восстановить scrollLeft после манипуляций с DOM */
+/* сохраняем scrollLeft на время DOM-манипуляций */
 function withPreservedFsScroll(fn){
   const fs = getFootSwipe();
   if(!fs){ fn(); return; }
@@ -390,7 +404,7 @@ function mountSidebarIntoFootSwipe(){
   ensureFootSwipeOrder();
   attachFsScrollWatcher();
 
-  // первый вход — стартуем с «me»
+  // первый вход — открыть «me»
   if (!footSwipeInitialized){
     initSuppressed = true;
     activePaneIdx = 1;
@@ -398,7 +412,7 @@ function mountSidebarIntoFootSwipe(){
     setTimeout(()=>{ initSuppressed = false; }, 250);
     footSwipeInitialized = true;
 
-    // следим за изменением размеров контейнера — подравниваем
+    // на изменение размеров контейнера — подтягиваем позицию
     if (fsResizeObs) fsResizeObs.disconnect();
     fsResizeObs = new ResizeObserver(()=> alignToActivePane('instant'));
     fsResizeObs.observe(footSwipe);
@@ -419,13 +433,13 @@ function unmountSidebarFromFootSwipe(){
   sidebarMounted = false;
   sidebarPlaceholder = null;
 
-  // сбросим инициализацию, чтобы при следующем входе снова стартовать с me
+  // сброс состояний
   footSwipeInitialized = false;
   initSuppressed = false;
   if (fsResizeObs){ fsResizeObs.disconnect(); fsResizeObs = null; }
 }
 
-/** Порядок: [Подключены][Настройки][Чат] — без сдвига текущего скролла */
+/** Порядок: [Подключены][Настройки][Чат] — без дергания скролла */
 function ensureFootSwipeOrder(){
   const fs = getFootSwipe();
   if (!fs) return;
@@ -451,14 +465,8 @@ function ensureFootSwipeOrder(){
 function handleSidebarRelocation(){
   if (isLandscapeMobileNow()){
     mountSidebarIntoFootSwipe();
-    // если уже инициализировались — остаёмся на текущей панели
-    if (!footSwipeInitialized){
-      activePaneIdx = 1;
-      alignToActivePane('instant');
-      footSwipeInitialized = true;
-    } else {
-      alignToActivePane('instant');
-    }
+    // удерживаем текущую панель (или me при первом входе)
+    alignToActivePane('instant');
   } else {
     unmountSidebarFromFootSwipe();
   }
