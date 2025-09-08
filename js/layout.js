@@ -297,9 +297,7 @@ function mountSidebarIntoFootSwipe(){
   const pane = document.createElement('div');
   pane.className = 'foot-pane sidebar-pane';
 
-  const title = document.createElement('h3');
-  title.textContent = 'Подключены';
-  title.style.cssText = 'margin:0 0 10px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;';
+
 
   const wrapper = document.createElement('div');
   wrapper.className = 'list';
