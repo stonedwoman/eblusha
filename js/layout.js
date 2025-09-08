@@ -298,8 +298,6 @@ let suppressDetect = false;            // блокировка детектор�
 let fsResizeObs = null;
 let fsScrollHandler = null;
 
-const STORAGE_KEY = 'footPaneIdx_v1';
-
 /* утилиты DOM */
 const getFootSwipe   = () => document.querySelector('.foot-swipe');
 const getFootPanes   = () => {
@@ -323,21 +321,9 @@ function getChatPane(){
 }
 const getPaneIndex = (p) => { const panes = getFootPanes(); return p ? panes.indexOf(p) : -1; };
 
-/* сохранение/восстановление выбранной панели */
-function loadSavedPaneIdx(){
-  try{
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    return raw != null ? Math.max(0, Math.min(+raw, getFootPanes().length-1)) : null;
-  }catch{ return null; }
-}
-function saveActivePaneIdx(){
-  try{ sessionStorage.setItem(STORAGE_KEY, String(activePaneIdx)); }catch{}
-}
-
 /* совместимость: внешний код может вызывать это API */
 function scrollFootSwipeToPane(idx, behavior = 'instant'){
   activePaneIdx = Math.max(0, Math.min(idx, getFootPanes().length - 1));
-  saveActivePaneIdx();
   alignToActivePane(behavior);
 }
 
@@ -393,7 +379,6 @@ function attachFsScrollWatcher(){
     if (t) return;
     t = setTimeout(()=>{
       activePaneIdx = detectActivePaneIdx();
-      saveActivePaneIdx();
       t = null;
     }, 100);
   };
@@ -463,15 +448,10 @@ function mountSidebarIntoFootSwipe(){
   // порядок панелей
   ensureFootSwipeOrder(false);
 
-  // Первый вход в landscape: выбираем сохранённую панель или «настройки»
+  // Первый вход в landscape: всегда показываем «настройки»
   if (!footSwipeInitialized){
-    const saved = loadSavedPaneIdx();
-    if (saved != null){
-      activePaneIdx = saved;
-    } else {
-      const sIdx = getPaneIndex(getSettingsPane());
-      activePaneIdx = sIdx >= 0 ? sIdx : 1;
-    }
+    const sIdx = getPaneIndex(getSettingsPane());
+    activePaneIdx = sIdx >= 0 ? sIdx : 1;
     attachFsScrollWatcher();
     // выравниваемся на выбранную панель
     alignToActivePane('instant');
