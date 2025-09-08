@@ -22,7 +22,6 @@ export function queueSbarUpdate(){
   sbarUpdateTimer = setTimeout(()=> updateMobileScrollbar(false), 50);
 }
 
-
 export function updateMobileScrollbar(forceShow){
   // в landscape мобилы — горизонтального скролла нет, там сетка
   if(!isMobileView() || isLandscapeMobileNow() || ctx.isStageFull) {
@@ -159,8 +158,9 @@ export function applyLayout(){
     // в landscape — равномерная сетка, в портретной мобилке — горизонтальная лента + скроллбар
     if (isLandscapeMobileNow()){
       settleGrid();
-      // центрируем карусель на «Настройки» (средняя панель)
-      scrollFootSwipeToPane(1, 'instant');
+      // тут НЕ переезжаем насильно на индекс 1 — держим текущую панель;
+      // при первом входе это сделает mountSidebarIntoFootSwipe()
+      alignToActivePane('instant');
     } else {
       updateMobileScrollbar(true);
     }
@@ -282,18 +282,18 @@ window.addEventListener('resize', ()=> { if (isLandscapeMobileNow()) applyEqualG
 window.addEventListener('orientationchange', ()=> { if (isLandscapeMobileNow()) setTimeout(applyEqualGrid, 60); });
 
 /* ========================================================================== */
-/* === Перенос в карусель и порядок панелей: [0] Подключены, [1] Настройки, [2] Чат === */
+/* === Перенос в карусель и порядок панелей: [Подключены][Настройки][Чат] === */
 /* ========================================================================== */
 
 const mqLand = window.matchMedia('(max-width: 950px) and (hover: none) and (pointer: coarse) and (orientation: landscape)');
-const isLandscapeMobileNow = () => mqLand.matches;
+function isLandscapeMobileNow(){ return mqLand?.matches; }
 
 let sidebarMounted = false;
 let sidebarPlaceholder = null;
 
 /* состояние карусели */
 let footSwipeInitialized = false; // первый вход в landscape
-let activePaneIdx = 1;            // стартовая панель — «me/Настройки»
+let activePaneIdx = 1;            // будем держать актуальный индекс
 let initSuppressed = false;       // не фиксировать активную панель во время первичного автоскролла
 let fsResizeObs = null;
 
@@ -303,6 +303,14 @@ function getFootPanes(){
   const fs = getFootSwipe();
   return fs ? Array.from(fs.querySelectorAll('.foot-pane')) : [];
 }
+function getSidebarPane(){ return getFootSwipe()?.querySelector('.foot-pane.sidebar-pane') || null; }
+function getSettingsPane(){
+  return getFootPanes().find(p => p !== getSidebarPane() && p.querySelector('.me-card')) || null;
+}
+function getChatPane(){
+  return getFootPanes().find(p => p !== getSidebarPane() && p.querySelector('.chatbox')) || null;
+}
+function getPaneIndex(p){ const panes = getFootPanes(); return p ? panes.indexOf(p) : -1; }
 
 /* ШИМ совместимости: старые вызовы продолжают работать */
 function scrollFootSwipeToPane(idx, behavior = 'instant'){
@@ -402,9 +410,13 @@ function mountSidebarIntoFootSwipe(){
   // первый вход — открыть «me»
   if (!footSwipeInitialized){
     initSuppressed = true;
-    activePaneIdx = 1;
+
+    const settingsPane = getSettingsPane();
+    const sIdx = getPaneIndex(settingsPane);
+    activePaneIdx = sIdx >= 0 ? sIdx : 1;
+
     alignToActivePane('instant');
-    setTimeout(()=>{ initSuppressed = false; }, 250);
+    setTimeout(()=>{ initSuppressed = false; }, 300);
     footSwipeInitialized = true;
 
     // на изменение размеров контейнера — подтягиваем позицию
@@ -434,25 +446,19 @@ function unmountSidebarFromFootSwipe(){
   if (fsResizeObs){ fsResizeObs.disconnect(); fsResizeObs = null; }
 }
 
-/** Порядок: [Подключены][Настройки][Чат] — без дергания скролла */
+/** Жёстко выставляем порядок: [Подключены][Настройки][Чат] */
 function ensureFootSwipeOrder(){
   const fs = getFootSwipe();
   if (!fs) return;
 
-  const panes = getFootPanes();
-  if (!panes.length) return;
-
-  const sidebarPane = fs.querySelector('.foot-pane.sidebar-pane');
-  const rest = panes.filter(p => p !== sidebarPane);
-  if (!rest.length) return;
-
-  const settingsPane = rest[0]; // «Я / Настройки»
-  const chatPane     = rest[1] || null;
+  const sidebarPane = getSidebarPane();
+  const settingsPane = getSettingsPane();
+  const chatPane = getChatPane();
 
   withPreservedFsScroll(()=> {
-    if (sidebarPane) fs.insertBefore(sidebarPane, fs.firstChild);     // слева
-    if (settingsPane) fs.insertBefore(settingsPane, chatPane || null);// середина
-    // chatPane остаётся справа
+    if (sidebarPane) fs.insertBefore(sidebarPane, fs.firstChild); // слева
+    if (settingsPane) fs.appendChild(settingsPane);                // середина
+    if (chatPane)     fs.appendChild(chatPane);                    // справа
   });
 }
 
