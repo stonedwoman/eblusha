@@ -44,4 +44,4 @@
 
 .btn.send{margin-top:10px; width:-webkit-fill-available; background:var(--accent); border-color:transparent; display:block}
 #btnShare{display:none !important}
-.chat-log{max-height:135px}
+.chat-log{min-height: 135px;}
