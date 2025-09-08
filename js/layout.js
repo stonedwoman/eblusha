@@ -22,46 +22,54 @@ export function queueSbarUpdate(){
   sbarUpdateTimer = setTimeout(()=> updateMobileScrollbar(false), 50);
 }
 
+/* Надёжная проверка landscape на мобиле: как в CSS */
+const mqLand = window.matchMedia('(max-width: 950px) and (orientation: landscape)');
+function isLandscapeMobileNow(){
+  return mqLand.matches || (window.innerWidth <= 950 && window.matchMedia('(orientation: landscape)').matches);
+}
+
 export function updateMobileScrollbar(forceShow){
   // в landscape мобилы — горизонтального скролла нет, там сетка
-  if(!isMobileView() || isMobileLandscape() || ctx.isStageFull) {
+  if(!isMobileView() || isLandscapeMobileNow() || ctx.isStageFull) {
     sbar?.classList.remove('show');
     return;
   }
-  const m = tilesMain(); if(!m) return;
+  const m = tilesMain(); if(!m || !sbar) return;
 
   const scrollW = m.scrollWidth, viewW = m.clientWidth;
   const need = scrollW > viewW + 2;
-  if (!sbar) return;
 
   sbar.setAttribute('aria-hidden', need ? 'false' : 'true');
   sbar.classList.toggle('show', need);
   if(!need) return;
 
-  const trackW  = sbarTrack.clientWidth;
+  const trackW  = sbarTrack?.clientWidth || 0;
   const minTh   = 28;
   const thumbW  = Math.max(minTh, Math.round((viewW/scrollW) * trackW));
   const maxLeft = Math.max(0, trackW - thumbW);
   const left    = maxLeft ? Math.round((m.scrollLeft / (scrollW - viewW)) * maxLeft) : 0;
 
-  sbarThumb.style.width     = thumbW + 'px';
-  sbarThumb.style.transform = `translateX(${left}px)`;
-
-  if(forceShow){
-    sbarThumb.animate(
-      [{transform:`translateX(${left}px) scaleY(1.0)`},
-       {transform:`translateX(${left}px) scaleY(1.25)`},
-       {transform:`translateX(${left}px) scaleY(1.0)`}],
-      {duration:600, easing:'ease-out'}
-    );
+  if (sbarThumb){
+    sbarThumb.style.width     = thumbW + 'px';
+    sbarThumb.style.transform = `translateX(${left}px)`;
+    if(forceShow){
+      sbarThumb.animate(
+        [{transform:`translateX(${left}px) scaleY(1.0)`},
+         {transform:`translateX(${left}px) scaleY(1.25)`},
+         {transform:`translateX(${left}px) scaleY(1.0)`}],
+        {duration:600, easing:'ease-out'}
+      );
+    }
   }
 }
 
-tilesMain().addEventListener('scroll', ()=> updateMobileScrollbar(false), {passive:true});
+/* безопасная подписка на скролл tiles-main */
+const _m = tilesMain();
+_m && _m.addEventListener('scroll', ()=> updateMobileScrollbar(false), {passive:true});
 window.addEventListener('resize',  ()=> updateMobileScrollbar(false));
 
 function sbarSetScrollByThumbX(px){
-  const m = tilesMain();
+  const m = tilesMain(); if(!m || !sbarTrack || !sbarThumb) return;
   const trackW  = sbarTrack.clientWidth;
   const thumbW  = sbarThumb.clientWidth;
   const maxLeft = Math.max(0, trackW - thumbW);
@@ -73,6 +81,7 @@ function sbarSetScrollByThumbX(px){
 }
 
 function startSbarDrag(clientX){
+  if(!sbar || !sbarTrack || !sbarThumb) return;
   sbar.classList.add('dragging');
   const rect = sbarTrack.getBoundingClientRect();
   const th   = sbarThumb.getBoundingClientRect();
@@ -84,24 +93,27 @@ function moveSbarDrag(clientX){
   const delta = clientX - sbarDrag.startX;
   sbarSetScrollByThumbX(sbarDrag.startLeft + delta);
 }
-function endSbarDrag(){ sbar.classList.remove('dragging'); sbarDrag=null; }
+function endSbarDrag(){ sbar && sbar.classList.remove('dragging'); sbarDrag=null; }
 
-sbarThumb.addEventListener('mousedown', (e)=>{ e.preventDefault(); startSbarDrag(e.clientX); });
-document.addEventListener('mousemove', (e)=>{ if(sbarDrag) moveSbarDrag(e.clientX); });
-document.addEventListener('mouseup', endSbarDrag);
-sbarThumb.addEventListener('touchstart', (e)=>{ startSbarDrag(e.touches[0].clientX); }, {passive:true});
-document.addEventListener('touchmove',  (e)=>{ if(sbarDrag) moveSbarDrag(e.touches[0].clientX); }, {passive:true});
-document.addEventListener('touchend', endSbarDrag);
-sbarTrack.addEventListener('mousedown', (e)=>{
-  if(e.target===sbarThumb) return;
-  const rect = sbarTrack.getBoundingClientRect();
-  sbarSetScrollByThumbX(e.clientX - rect.left - sbarThumb.clientWidth/2);
-});
-sbarTrack.addEventListener('touchstart', (e)=>{
-  if(e.target===sbarThumb) return;
-  const rect = sbarTrack.getBoundingClientRect();
-  sbarSetScrollByThumbX(e.touches[0].clientX - rect.left - sbarThumb.clientWidth/2);
-}, {passive:true});
+/* навешиваем обработчики только если элементы есть */
+if (sbarThumb && sbarTrack && sbar){
+  sbarThumb.addEventListener('mousedown', (e)=>{ e.preventDefault(); startSbarDrag(e.clientX); });
+  document.addEventListener('mousemove', (e)=>{ if(sbarDrag) moveSbarDrag(e.clientX); });
+  document.addEventListener('mouseup', endSbarDrag);
+  sbarThumb.addEventListener('touchstart', (e)=>{ startSbarDrag(e.touches[0].clientX); }, {passive:true});
+  document.addEventListener('touchmove',  (e)=>{ if(sbarDrag) moveSbarDrag(e.touches[0].clientX); }, {passive:true});
+  document.addEventListener('touchend', endSbarDrag);
+  sbarTrack.addEventListener('mousedown', (e)=>{
+    if(e.target===sbarThumb) return;
+    const rect = sbarTrack.getBoundingClientRect();
+    sbarSetScrollByThumbX(e.clientX - rect.left - sbarThumb.clientWidth/2);
+  });
+  sbarTrack.addEventListener('touchstart', (e)=>{
+    if(e.target===sbarThumb) return;
+    const rect = sbarTrack.getBoundingClientRect();
+    sbarSetScrollByThumbX(e.touches[0].clientX - rect.left - sbarThumb.clientWidth/2);
+  }, {passive:true});
+}
 
 /* --- spotlight / раскладка --- */
 
@@ -130,6 +142,16 @@ export function applyLayout(){
     }
   });
 
+  // если вообще нет плиток, а локальный участник уже есть — вставим заглушку
+  if (!document.querySelector('.tile') && ctx.room?.localParticipant){
+    const me  = ctx.room.localParticipant;
+    const rec = ctx.registry.get(me.identity);
+    if (rec && !rec.tile){
+      rec.tile = createTileEl(me.identity, rec.name || me.identity, true);
+      main && main.appendChild(rec.tile);
+    }
+  }
+
   if (mobile) {
     tiles.classList.remove('spotlight','single');
     document.querySelectorAll('.tile').forEach(t=>{
@@ -140,10 +162,10 @@ export function applyLayout(){
     updateUsersCounter();
 
     // в landscape — равномерная сетка, в портретной мобилке — горизонтальная лента + скроллбар
-    if (isMobileLandscape()){
-      applyEqualGrid();
+    if (isLandscapeMobileNow()){
+      settleGrid();
       // центрируем карусель на «Настройки» (средняя панель)
-      if (mqLand.matches) scrollFootSwipeToPane(1, 'instant');
+      scrollFootSwipeToPane(1, 'instant');
     } else {
       updateMobileScrollbar(true);
     }
@@ -182,8 +204,8 @@ export function applyLayout(){
 export function fitSpotlightSize(){
   if (isMobileView() && !ctx.isStageFull) return;
   const main = tilesMain();
-  const tile = main.querySelector('.tile.spotlight');
-  if (!tile) return;
+  const tile = main?.querySelector('.tile.spotlight');
+  if (!tile || !main) return;
 
   const box = main.getBoundingClientRect();
   const ar  = tile.classList.contains('portrait') ? (9/16) : (16/9);
@@ -253,15 +275,21 @@ function applyEqualGrid(){
   m.style.setProperty('--cell-h', `${best.cellH}px`);
 }
 
+/* «Осадка» сетки для iOS/медленных ресайзов */
+function settleGrid(){
+  applyEqualGrid();
+  requestAnimationFrame(applyEqualGrid);
+  setTimeout(applyEqualGrid, 60);
+}
+
 // пересчёт сетки при изменении размеров/ориентации
-window.addEventListener('resize',          ()=> { if (isMobileLandscape()) applyEqualGrid(); }, { passive:true });
-window.addEventListener('orientationchange',()=> { if (isMobileLandscape()) setTimeout(applyEqualGrid, 60); });
+window.addEventListener('resize', ()=> { if (isLandscapeMobileNow()) applyEqualGrid(); }, { passive:true });
+window.addEventListener('orientationchange', ()=> { if (isLandscapeMobileNow()) setTimeout(applyEqualGrid, 60); });
 
 /* ========================================================================== */
 /* === Перенос в карусель и порядок панелей: [0] Подключены, [1] Настройки, [2] Чат === */
 /* ========================================================================== */
 
-const mqLand = window.matchMedia('(max-width: 950px) and (hover: none) and (pointer: coarse) and (orientation: landscape)');
 let sidebarMounted = false;
 let sidebarPlaceholder = null;
 
@@ -359,7 +387,7 @@ function ensureFootSwipeOrder(){
 
 /** Реакция на вход/выход из landscape-режима */
 function handleSidebarRelocation(){
-  if (mqLand.matches){
+  if (isLandscapeMobileNow()){
     mountSidebarIntoFootSwipe();
     setTimeout(()=> scrollFootSwipeToPane(1, 'instant'), 60);
   } else {
@@ -369,8 +397,9 @@ function handleSidebarRelocation(){
 
 handleSidebarRelocation();
 mqLand.addEventListener?.('change', handleSidebarRelocation);
+window.matchMedia('(orientation: landscape)').addEventListener?.('change', handleSidebarRelocation);
 window.addEventListener('orientationchange', handleSidebarRelocation);
 window.addEventListener('resize', () => {
   handleSidebarRelocation();
-  if (mqLand.matches) scrollFootSwipeToPane(1, 'instant');
+  if (isLandscapeMobileNow()) scrollFootSwipeToPane(1, 'instant');
 });
