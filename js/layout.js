@@ -22,11 +22,6 @@ export function queueSbarUpdate(){
   sbarUpdateTimer = setTimeout(()=> updateMobileScrollbar(false), 50);
 }
 
-/* Надёжная проверка landscape на мобиле: как в CSS */
-const mqLand = window.matchMedia('(max-width: 950px) and (orientation: landscape)');
-function isLandscapeMobileNow(){
-  return mqLand.matches || (window.innerWidth <= 950 && window.matchMedia('(orientation: landscape)').matches);
-}
 
 export function updateMobileScrollbar(forceShow){
   // в landscape мобилы — горизонтального скролла нет, там сетка
