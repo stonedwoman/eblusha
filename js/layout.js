@@ -293,7 +293,7 @@ let sidebarPlaceholder = null;
 
 /* состояние карусели */
 let footSwipeInitialized = false; // первый вход в landscape
-let activePaneIdx = 1;            // будем держать актуальный индекс
+let activePaneIdx = 1;            // актуальный индекс активной панели
 let initSuppressed = false;       // не фиксировать активную панель во время первичного автоскролла
 let fsResizeObs = null;
 
@@ -318,7 +318,7 @@ function scrollFootSwipeToPane(idx, behavior = 'instant'){
   alignToActivePane(behavior);
 }
 
-/* аккуратный скролл к активной панели с «подтяжкой» после релоевта */
+/* аккуратный скролл к активной панели с «подтяжкой» после перерисовок */
 function alignToActivePane(behavior = 'instant'){
   const fs = getFootSwipe(); const panes = getFootPanes();
   if (!fs || !panes.length) return;
@@ -327,44 +327,60 @@ function alignToActivePane(behavior = 'instant'){
 
   const left = target.offsetLeft;
   fs.scrollTo({ left, behavior });
+  // «двойная подтяжка», чтобы зафиксировать позицию после возможных рефлоу
   requestAnimationFrame(()=> fs.scrollTo({ left, behavior:'instant' }));
   setTimeout(()=> fs.scrollTo({ left, behavior:'instant' }), 60);
 }
 
-/* вычислить индекс панели ближе к центру */
+/* вычислить индекс панели, в которую попадает центр экрана */
 function detectActivePaneIdx(){
   const fs = getFootSwipe(); const panes = getFootPanes();
-  if(!fs || !panes.length) return activePaneIdx;
+  if (!fs || !panes.length) return activePaneIdx;
+
   const center = fs.scrollLeft + fs.clientWidth / 2;
+
+  // 1) если центр попадает внутрь панели — берём её
+  const hit = panes.findIndex(p => {
+    const left = p.offsetLeft;
+    const right = left + p.clientWidth;
+    return center >= left && center <= right;
+  });
+  if (hit !== -1) return hit;
+
+  // 2) иначе — ближайшая по краю (при равенстве берём правую)
   let best = 0, bestDist = Infinity;
-  panes.forEach((p, i)=>{
-    const pc = p.offsetLeft + p.clientWidth / 2;
-    const d = Math.abs(center - pc);
-    if(d < bestDist){ bestDist = d; best = i; }
+  panes.forEach((p, i) => {
+    const left = p.offsetLeft, right = left + p.clientWidth;
+    const d = center < left ? (left - center) : (center - right);
+    if (d < bestDist || (d === bestDist && i > best)) {
+      bestDist = d; best = i;
+    }
   });
   return best;
 }
 
-/* следим за скроллом пользователя */
+/* следим за скроллом пользователя и обновляем activePaneIdx */
 function attachFsScrollWatcher(){
   const fs = getFootSwipe();
-  if(!fs || fs.__watching) return;
+  if (!fs || fs.__watching) return;
   fs.__watching = true;
   let t = null;
   fs.addEventListener('scroll', ()=>{
-    if(initSuppressed) return;
-    if(t) return;
+    if (initSuppressed) return;
+    if (t) return;
     t = setTimeout(()=>{ activePaneIdx = detectActivePaneIdx(); t = null; }, 120);
   }, { passive:true });
 }
 
-/* сохраняем scrollLeft на время DOM-манипуляций */
-function withPreservedFsScroll(fn){
+/* сохраняем scrollLeft на время DOM-манипуляций (по умолчанию) */
+function withPreservedFsScroll(fn, preserve = true){
   const fs = getFootSwipe();
-  if(!fs){ fn(); return; }
-  const left = fs.scrollLeft;
+  if (!fs){ fn(); return; }
+  const left = preserve ? fs.scrollLeft : null;
   fn();
-  requestAnimationFrame(()=> { fs.scrollLeft = left; });
+  if (preserve && left != null){
+    requestAnimationFrame(()=> { fs.scrollLeft = left; });
+  }
 }
 
 /** Вставить «Подключены» как ПЕРВУЮ панель (слева) */
@@ -398,31 +414,34 @@ function mountSidebarIntoFootSwipe(){
   pane.appendChild(title);
   pane.appendChild(wrapper);
 
+  // вставляем без сохранения скролла (чтобы не перебить автоскролл на me)
   withPreservedFsScroll(()=> {
     footSwipe.insertBefore(pane, footSwipe.firstChild);
-  });
+  }, /*preserve*/ false);
 
   sidebarMounted = true;
 
-  ensureFootSwipeOrder();
-  attachFsScrollWatcher();
-
-  // первый вход — открыть «me»
+  // первый вход — расставить панели и открыть «me»
   if (!footSwipeInitialized){
+    ensureFootSwipeOrder(/*preserve*/ false); // без возврата scrollLeft
+    attachFsScrollWatcher();
+
     initSuppressed = true;
-
-    const settingsPane = getSettingsPane();
-    const sIdx = getPaneIndex(settingsPane);
-    activePaneIdx = sIdx >= 0 ? sIdx : 1;
-
+    const sPane = getSettingsPane();
+    const sIdx  = getPaneIndex(sPane);
+    activePaneIdx = sIdx >= 0 ? sIdx : 1; // по умолчанию середина
     alignToActivePane('instant');
     setTimeout(()=>{ initSuppressed = false; }, 300);
+
     footSwipeInitialized = true;
 
-    // на изменение размеров контейнера — подтягиваем позицию
     if (fsResizeObs) fsResizeObs.disconnect();
     fsResizeObs = new ResizeObserver(()=> alignToActivePane('instant'));
     fsResizeObs.observe(footSwipe);
+  } else {
+    // повторные входы — просто сохранить порядок и позицию
+    ensureFootSwipeOrder(/*preserve*/ true);
+    alignToActivePane('instant');
   }
 }
 
@@ -447,27 +466,26 @@ function unmountSidebarFromFootSwipe(){
 }
 
 /** Жёстко выставляем порядок: [Подключены][Настройки][Чат] */
-function ensureFootSwipeOrder(){
+function ensureFootSwipeOrder(preserve = true){
   const fs = getFootSwipe();
   if (!fs) return;
 
-  const sidebarPane = getSidebarPane();
+  const sidebarPane  = getSidebarPane();
   const settingsPane = getSettingsPane();
-  const chatPane = getChatPane();
+  const chatPane     = getChatPane();
 
   withPreservedFsScroll(()=> {
-    if (sidebarPane) fs.insertBefore(sidebarPane, fs.firstChild); // слева
+    if (sidebarPane)  fs.insertBefore(sidebarPane, fs.firstChild); // слева
     if (settingsPane) fs.appendChild(settingsPane);                // середина
     if (chatPane)     fs.appendChild(chatPane);                    // справа
-  });
+  }, preserve);
 }
 
 /** Реакция на вход/выход из landscape-режима */
 function handleSidebarRelocation(){
   if (isLandscapeMobileNow()){
     mountSidebarIntoFootSwipe();
-    // удерживаем текущую панель (или me при первом входе)
-    alignToActivePane('instant');
+    alignToActivePane('instant'); // удерживаем текущую панель
   } else {
     unmountSidebarFromFootSwipe();
   }
