@@ -110,7 +110,7 @@
 /* ГЛАВНОЕ: блокируем вертикаль на контейнере */
 .foot-swipe{
   display:flex;
-  overflow-x:auto;
+  overflow-x:scroll;
   overflow-y:hidden;                 /* не даём вертикально прокручиваться внутри */
   scroll-snap-type:x mandatory;
   -webkit-overflow-scrolling:touch;
