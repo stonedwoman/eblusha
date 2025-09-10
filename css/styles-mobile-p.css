@@ -213,6 +213,7 @@ html, body{
   min-width:0;               /* чтобы не ширился больше грида */
   padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
   box-sizing:border-box;
+  height: auto;
 }
 
 /* панель = ровно ширина контейнера, без старых min-width */
@@ -221,5 +222,5 @@ html, body{
   width: auto !important;    /* не фиксируем width жёстко */
   min-width: 0 !important;   /* сбиваем любые унаследованные min-width */
   box-sizing: border-box;
-  padding:12px 12px 0;
+  padding:0 12px 0;
 }
