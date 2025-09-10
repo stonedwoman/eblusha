@@ -47,22 +47,23 @@ html, body{
 
 .tile .name{top:10px; bottom:unset}
 
-/* Tiles: horizontal ribbon (как было) */
+/* Tiles: SMART GRID вместо горизонтальной ленты */
 .tiles{
   display:grid !important;
   grid-template-columns:1fr !important;
-  grid-template-rows:1fr !important
+  grid-template-rows:1fr !important;
 }
 .tiles-main{
-  display:flex;
+  display:grid;                       /* было: flex */
   gap:var(--tile-gap);
-  align-items:anchor-center;
-  overflow-x:auto; overflow-y:hidden;
-  -webkit-overflow-scrolling:touch;
-  overscroll-behavior:contain;          /* не триггерим резинку страницы */
-  touch-action:pan-x;                    /* только горизонтальные жесты */
-  scroll-snap-type:x proximity;
-  scroll-padding-inline:var(--m-tiles-pad);
+  justify-content:center;             /* центрируем по ширине */
+  align-content:center;               /* центрируем по высоте */
+  overflow:hidden;                    /* отключаем горизонтальный скролл ленты */
+  -webkit-overflow-scrolling:auto;    /* сброс */
+  overscroll-behavior:contain;
+  touch-action:auto;                  /* жесты как обычно */
+  scroll-snap-type:none;              /* сброс ленты */
+  scroll-padding-inline:0;            /* сброс ленты */
 }
 :root{
   --m-tile-size: calc(
@@ -72,35 +73,18 @@ html, body{
 }
 .tile{
   min-height:0;
-  flex:0 0 var(--m-tile-size);
-  width:var(--m-tile-size);
-  height:var(--m-tile-size);
-  aspect-ratio:auto !important;
-  scroll-snap-align:start;
+  /* было: flex:0 0 var(--m-tile-size); width/height квадрат — убираем */
+  flex:none;
+  width:100%;
+  height:auto;
+  aspect-ratio:auto;                  /* inline-стиль из JS переопределит (16/9 или 9/16) */
+  scroll-snap-align:unset;            /* сброс ленты */
 }
 .tile .controls{display:none !important}
 .tile video{width:100%; height:100%; object-fit:cover}
 
-/* Custom scrollbar bar (для плиток) */
-.tiles-sbar{
-  position:absolute;
-  left:var(--m-tiles-pad);
-  right:calc(var(--m-tiles-pad) + env(safe-area-inset-right));
-  bottom:8px; height:8px; z-index:5; display:none; pointer-events:auto;
-}
-.tiles-sbar.show{display:block}
-.tiles-sbar .track{
-  width:100%; height:100%;
-  background:rgba(255,255,255,.08);
-  border:1px solid rgba(255,255,255,.12);
-  border-radius:999px; position:relative
-}
-.tiles-sbar .thumb{
-  position:absolute; top:0; left:0; height:100%; background:var(--accent);
-  border-radius:999px; box-shadow:0 1px 6px rgba(0,0,0,.35);
-  touch-action:none; user-select:none; cursor:grab
-}
-.tiles-sbar.dragging .thumb{cursor:grabbing}
+/* Custom scrollbar bar (для плиток) — отключаем для портретной сетки */
+.tiles-sbar{ display:none !important }
 
 /* ===== Footer as swipe carousel (портрет: 3 панели как в ландшафте) ===== */
 .footer{
@@ -170,6 +154,7 @@ html, body{
 }
 #btnShare{display:none !important}
 .chat-log{min-height:135px;}
+
 /* контейнер карусели учитывает safe-area, а не панель */
 .foot-swipe{
   display:flex;

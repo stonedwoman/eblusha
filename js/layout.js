@@ -156,6 +156,99 @@ export function chooseAutoSpotlight(){
   return [...ctx.registry.keys()][0];
 }
 
+/* ========== MOBILE SMART ASPECT GRID (16:9 / 9:16, максимальная площадь) ========== */
+
+/** Для одиночной плитки берём AR по ориентации stage: ландшафт 16:9, портрет 9:16 */
+function pickARForSingle(stageAR){
+  return stageAR >= 1 ? 16/9 : 9/16;
+}
+
+/** Подбор лучшей сетки под заданный AR: максимизируем площадь плитки */
+function bestGridForAR(N, W, H, gap, AR){
+  let best = null;
+  for (let cols = 1; cols <= N; cols++){
+    const rows   = Math.ceil(N / cols);
+    const wAvail = W - gap * (cols - 1);
+    const hAvail = H - gap * (rows - 1);
+    if (wAvail <= 0 || hAvail <= 0) continue;
+
+    // 1) Заполнение по ширине (1fr-колонки)
+    const cwFill     = wAvail / cols;
+    const chFill     = cwFill / AR;
+    const totalHFill = rows * chFill + gap * (rows - 1);
+
+    if (totalHFill <= H + 0.5){
+      const area = cwFill * chFill;
+      if (!best || area > best.area)
+        best = { mode:'fillWidth', cols, rows, cw:cwFill, ch:chFill, AR, area };
+      // нет смысла пытаться fitHeight, если fillWidth уже поместился лучше/равно
+    } else {
+      // 2) Подгон по высоте
+      const chFit     = hAvail / rows;
+      const cwFit     = chFit * AR;
+      const totalWFit = cols * cwFit + gap * (cols - 1);
+
+      if (cwFit > 0 && totalWFit <= W + 0.5){
+        const area = cwFit * chFit;
+        if (!best || area > best.area)
+          best = { mode:'fitHeight', cols, rows, cw:cwFit, ch:chFit, AR, area };
+      }
+    }
+  }
+  return best;
+}
+
+/** Главный раскладчик мобильных плиток: строгий 16:9 / 9:16 + максимум площади */
+function layoutMobileTiles(){
+  const m = tilesMain(); if (!m) return;
+  const tiles = m.querySelectorAll('.tile'); const N = tiles.length;
+  if (!N) return;
+
+  const box = m.getBoundingClientRect();
+  const W = Math.max(0, box.width);
+  const H = Math.max(0, box.height);
+  if (W < 10 || H < 10){ requestAnimationFrame(layoutMobileTiles); return; }
+
+  const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
+  const stageAR = W / H;
+
+  // канд. AR: 1 плитка — AR по ориентации stage; иначе пробуем оба и выбираем лучший
+  let ARs = N === 1 ? [ pickARForSingle(stageAR) ] : [16/9, 9/16];
+
+  let best = null;
+  for (const AR of ARs){
+    const cand = bestGridForAR(N, W, H, gap, AR);
+    if (cand && (!best || cand.area > best.area)) best = cand;
+  }
+  if (!best) return;
+
+  // Применяем сетку
+  m.style.display = 'grid';
+  m.style.gap = `${gap}px`;
+  m.style.gridAutoFlow = 'row';
+  m.style.alignContent = 'center';
+  m.style.justifyContent = 'center';
+
+  if (best.mode === 'fillWidth'){
+    m.style.gridTemplateColumns = `repeat(${best.cols}, 1fr)`;
+  } else {
+    m.style.gridTemplateColumns = `repeat(${best.cols}, ${Math.floor(best.cw)}px)`;
+  }
+
+  const arCSS = best.AR > 1 ? '16 / 9' : '9 / 16';
+  tiles.forEach(t => {
+    t.style.width = '100%';
+    t.style.height = 'auto';
+    // фиксируем aspect-ratio у плитки (видео внутри — через object-fit в CSS)
+    t.style.aspectRatio = arCSS;
+  });
+
+  // в этой схеме горизонтального скролла нет — скрываем сбар (если был)
+  sbar?.classList.remove('show');
+}
+
+/* ======================================================================== */
+
 export function applyLayout(){
   const tiles = byId('tiles'), main = tilesMain(), rail = tilesRail();
   const mobile = isMobileView() && !ctx.isStageFull;
@@ -181,20 +274,17 @@ export function applyLayout(){
     tiles.classList.remove('spotlight','single');
     document.querySelectorAll('.tile').forEach(t=>{
       t.classList.remove('spotlight','thumb','portrait');
+      // очищаем прямые размеры — будем управлять через aspect-ratio
       t.style.width=''; t.style.height='';
       if (t.parentElement !== main) main.appendChild(t);
     });
-    updateUsersCounter();
 
-    // Ландшафт мобилки — равномерная сетка
-    if (isLandscapeMobileNow()){
-      settleGrid();
-      alignToActivePane('instant'); // удерживаем текущую панель карусели
-    } else {
-      // Портрет: горизонтальная лента + скроллбар
-      updateMobileScrollbar(true);
-      alignToActivePane('instant'); // и здесь тоже удерживаем карусель
-    }
+    // Новая «умная» мобильная сетка (строгий AR + макс. площадь)
+    layoutMobileTiles();
+
+    // Удерживаем текущую панель карусели (если используется)
+    alignToActivePane('instant');
+    updateUsersCounter();
     return;
   }
 
@@ -204,6 +294,20 @@ export function applyLayout(){
 
   tiles.classList.add('spotlight');
   tiles.classList.toggle('single', totalTiles<=1);
+
+  // сброс параметров мобильной сетки при выходе из мобайла
+  const m = tilesMain();
+  if (m){
+    m.style.gridTemplateColumns = '';
+    m.style.display = '';
+    m.style.gap = '';
+    m.style.gridAutoFlow = '';
+    m.style.alignContent = '';
+    m.style.justifyContent = '';
+  }
+  document.querySelectorAll('.tile').forEach(t=>{
+    t.style.aspectRatio = '';
+  });
 
   document.querySelectorAll('.tile').forEach(t=>{
     t.classList.remove('spotlight','thumb');
@@ -252,6 +356,7 @@ export function highlightSpeaking(ids){
 }
 
 /* =================== MOBILE LANDSCAPE: равномерная сетка ================== */
+/* Оставлено для совместимости; новая умная сетка выше покрывает оба режима. */
 
 function applyEqualGrid(){
   const m = tilesMain();
@@ -305,7 +410,7 @@ function settleGrid(){
   setTimeout(applyEqualGrid, 60);
 }
 
-// пересчёт сетки при изменении размеров/ориентации
+// пересчёт сетки при изменении размеров/ориентации (совместимость)
 window.addEventListener('resize', ()=> { if (isLandscapeMobileNow()) applyEqualGrid(); }, { passive:true });
 window.addEventListener('orientationchange', ()=> { if (isLandscapeMobileNow()) setTimeout(applyEqualGrid, 60); });
 
@@ -587,6 +692,17 @@ window.addEventListener('orientationchange', handleSidebarRelocation);
 window.addEventListener('resize', () => {
   handleSidebarRelocation();
   if (isCarouselModeNow()) alignToActivePane('instant');
+});
+
+/* Дополнительные пересчёты для умной мобильной сетки */
+window.addEventListener('resize', ()=>{
+  if (isMobileView() && !ctx.isStageFull) layoutMobileTiles();
+}, { passive:true });
+
+window.addEventListener('orientationchange', ()=>{
+  setTimeout(()=>{
+    if (isMobileView() && !ctx.isStageFull) layoutMobileTiles();
+  }, 60);
 });
 
 /* ========================================================================== */
