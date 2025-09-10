@@ -31,7 +31,7 @@
 .footer{grid-area:footer; display:block}
 .foot-swipe{display:flex; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none}
 .foot-swipe::-webkit-scrollbar{display:none}
-.foot-pane{scroll-snap-align:start; flex:0 0 100%; padding:12px; padding-bottom:0; padding-top:0}
+.foot-pane{scroll-snap-align:start; flex:0 0 100%; padding:12px; padding-bottom:0; padding-top:0;overflow-y: hidden}
 .foot-pane:last-child{border-right:none}
 .footer-left{padding:0; border-right:none}
 .footer-right{padding:0}
