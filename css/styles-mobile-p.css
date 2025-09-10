@@ -2,7 +2,12 @@
 /* Link with: media="(max-width: 640px) and (orientation: portrait)" */
 
 /* Жёсткая посадка экрана на iOS/Chrome(iOS) в этом режиме */
-html, body{height:100%; overflow:hidden; overscroll-behavior:none; -webkit-text-size-adjust:100%}
+html, body{
+  height:100%;
+  overflow:hidden;
+  overscroll-behavior:none;
+  -webkit-text-size-adjust:100%;
+}
 
 #screen-app{
   grid-template-columns:1fr;
@@ -21,20 +26,38 @@ html, body{height:100%; overflow:hidden; overscroll-behavior:none; -webkit-text-
 .topbar{padding:0; padding-bottom:10px; padding-left:10px}
 
 /* Онлайн-список */
-#onlineList{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px}
-.user{padding:8px; border:1px solid var(--line); background:var(--panel); border-radius:12px; gap:8px}
+#onlineList{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:8px
+}
+.user{
+  padding:8px;
+  border:1px solid var(--line);
+  background:var(--panel);
+  border-radius:12px;
+  gap:8px
+}
 .user:hover{background:rgba(255,255,255,.03)}
 
 .tile .name{top:10px; bottom:unset}
 
-/* Tiles: horizontal ribbon */
-.tiles{display:grid !important; grid-template-columns:1fr !important; grid-template-rows:1fr !important}
+/* Tiles: horizontal ribbon (как было) */
+.tiles{
+  display:grid !important;
+  grid-template-columns:1fr !important;
+  grid-template-rows:1fr !important
+}
 .tiles-main{
-  display:flex; gap:var(--tile-gap); align-items:anchor-center;
+  display:flex;
+  gap:var(--tile-gap);
+  align-items:anchor-center;
   overflow-x:auto; overflow-y:hidden;
   -webkit-overflow-scrolling:touch;
   overscroll-behavior:contain;          /* не триггерим резинку страницы */
   touch-action:pan-x;                    /* только горизонтальные жесты */
+  scroll-snap-type:x proximity;
+  scroll-padding-inline:var(--m-tiles-pad);
 }
 :root{
   --m-tile-size: calc(
@@ -53,24 +76,33 @@ html, body{height:100%; overflow:hidden; overscroll-behavior:none; -webkit-text-
 .tile .controls{display:none !important}
 .tile video{width:100%; height:100%; object-fit:cover}
 
-/* Custom scrollbar bar */
+/* Custom scrollbar bar (для плиток) */
 .tiles-sbar{
-  position:absolute; left:var(--m-tiles-pad); right:calc(var(--m-tiles-pad) + env(safe-area-inset-right));
+  position:absolute;
+  left:var(--m-tiles-pad);
+  right:calc(var(--m-tiles-pad) + env(safe-area-inset-right));
   bottom:8px; height:8px; z-index:5; display:none; pointer-events:auto;
 }
 .tiles-sbar.show{display:block}
 .tiles-sbar .track{
-  width:100%; height:100%; background:rgba(255,255,255,.08);
-  border:1px solid rgba(255,255,255,.12); border-radius:999px; position:relative
+  width:100%; height:100%;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:999px; position:relative
 }
 .tiles-sbar .thumb{
   position:absolute; top:0; left:0; height:100%; background:var(--accent);
-  border-radius:999px; box-shadow:0 1px 6px rgba(0,0,0,.35); touch-action:none; user-select:none; cursor:grab
+  border-radius:999px; box-shadow:0 1px 6px rgba(0,0,0,.35);
+  touch-action:none; user-select:none; cursor:grab
 }
 .tiles-sbar.dragging .thumb{cursor:grabbing}
 
-/* Footer as swipe carousel */
-.footer{grid-area:footer; display:block}
+/* ===== Footer as swipe carousel (портрет: 3 панели как в ландшафте) ===== */
+.footer{
+  grid-area:footer;
+  display:block;
+  padding-bottom:env(safe-area-inset-bottom);
+}
 .foot-swipe{
   display:flex;
   overflow-x:auto; overflow-y:hidden;
@@ -79,29 +111,62 @@ html, body{height:100%; overflow:hidden; overscroll-behavior:none; -webkit-text-
   scrollbar-width:none; -ms-overflow-style:none;
   overscroll-behavior:contain;   /* не прокручиваем страницу вертикально */
   touch-action:pan-x;
+  gap:0;
+  height:var(--footer-h, 260px);
+  scroll-padding-inline:0;
 }
 .foot-swipe::-webkit-scrollbar{display:none}
+
+/* Порядок панелей и ровно три штуки */
 .foot-pane{
-  scroll-snap-align:start; flex:0 0 100%;
+  scroll-snap-align:start;
+  scroll-snap-stop:always;
+  flex:0 0 100%;
   padding:12px; padding-bottom:0; padding-top:0;
   overflow-y:hidden; overscroll-behavior-y:none;
+  min-width:calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right));
+  height:100%;
 }
+
+/* порядок: [Подключены][Настройки][Чат] */
+.foot-pane.pane-connected{ order:1; }
+.foot-pane.pane-settings { order:2; }
+.foot-pane.pane-chat     { order:3; }
+
+/* любые прочие панели футера скрываем в портрете */
+.foot-pane:not(.pane-connected):not(.pane-settings):not(.pane-chat){
+  display:none !important;
+}
+
 .foot-pane:last-child{border-right:none}
 .footer-left{padding:0; border-right:none}
 .footer-right{padding:0}
 .chatbox{margin:0; height:100%}
 
 /* Пейджер */
-.foot-dots{display:flex; justify-content:center; align-items:center; gap:10px; padding:5px}
+.foot-dots{
+  display:flex; justify-content:center; align-items:center;
+  gap:10px; padding:5px
+}
 .foot-dots .fdot{
-  width:12px; height:16px; border-radius:50%; background:transparent;
-  border:2px solid var(--dots); opacity:.85; transform:scale(.95);
+  width:12px; height:16px; border-radius:50%;
+  background:transparent; border:2px solid var(--dots);
+  opacity:.85; transform:scale(.95);
   transition:transform .18s ease, opacity .18s ease, background .18s ease, border-color .18s ease
 }
-.foot-dots .fdot.active{background:var(--dots); border-color:var(--dots); opacity:1; transform:scale(1.1)}
+.foot-dots .fdot.active{
+  background:var(--dots); border-color:var(--dots);
+  opacity:1; transform:scale(1.1)
+}
 .foot-dots .fdot:focus-visible{outline:2px solid rgba(255,255,255,.6); outline-offset:2px}
 
 /* Кнопки / чат */
-.btn.send{margin-top:10px; width:-webkit-fill-available; background:var(--accent); border-color:transparent; display:block}
+.btn.send{
+  margin-top:10px;
+  width:-webkit-fill-available;
+  background:var(--accent);
+  border-color:transparent;
+  display:block
+}
 #btnShare{display:none !important}
 .chat-log{min-height:135px;}

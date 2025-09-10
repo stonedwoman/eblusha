@@ -1,18 +1,39 @@
+// layout.js
 import { ctx } from "./state.js";
 import { byId, isMobileView, isMobileLandscape } from "./utils.js";
 import { createTileEl, tilesMain, tilesRail } from "./tiles.js";
 import { usersCounterText } from "./registry.js";
 
-/* ===== Лэйаут / скроллбар / spotlight ===== */
+/* ========================================================================== */
+/* === ЛЭЙАУТ / МОБ. СКРОЛЛБАР / СПОТЛАЙТ / ФУТЕР-КАРУСЕЛЬ ================== */
+/* ========================================================================== */
 
+/* ----------------------------- Утилиты ----------------------------------- */
+const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+const raf = (fn) => requestAnimationFrame(fn);
+const on = (el, ev, fn, opts) => el && el.addEventListener(ev, fn, opts);
+const qs = (sel, root=document) => root.querySelector(sel);
+const qsa = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+/* ориентации и режимы */
+const mqLand = window.matchMedia('(max-width: 950px) and (hover: none) and (pointer: coarse) and (orientation: landscape)');
+const mqPort = window.matchMedia('(max-width: 640px) and (hover: none) and (pointer: coarse) and (orientation: portrait)');
+const isLandscapeMobileNow = () => mqLand?.matches;
+const isPortraitMobileNow  = () => mqPort?.matches;
+/* общий режим карусели (ландшафт мобильный ИЛИ портрет мобильный) */
+const isCarouselModeNow    = () => isLandscapeMobileNow() || isPortraitMobileNow();
+
+/* ------------------------ Пользовательский счётчик ----------------------- */
 export function updateUsersCounter(){
-  byId('usersTag').textContent = usersCounterText();
+  const tag = byId('usersTag');
+  if (tag) tag.textContent = usersCounterText();
 }
 
-/* --- mobile scrollbar (для портретной мобилки) --- */
-const sbar      = byId('tilesSbar');
-const sbarTrack = byId('sbarTrack');
-const sbarThumb = byId('sbarThumb');
+/* ===================== МОБИЛЬНЫЙ СКРОЛЛБАР ДЛЯ ПЛИТОК ==================== */
+/* селекторы переведены на классы под твой CSS (.tiles-sbar .track .thumb)   */
+const sbar      = qs('.tiles-sbar');
+const sbarTrack = qs('.tiles-sbar .track');
+const sbarThumb = qs('.tiles-sbar .thumb');
 
 let sbarDrag = null;
 let sbarUpdateTimer = null;
@@ -23,7 +44,7 @@ export function queueSbarUpdate(){
 }
 
 export function updateMobileScrollbar(forceShow){
-  // в landscape мобилы — горизонтального скролла нет, там сетка
+  // горизонтального скролла плиток нет, когда не мобайл, в ландшафте сетка, или fullscreen stage
   if(!isMobileView() || isLandscapeMobileNow() || ctx.isStageFull) {
     sbar?.classList.remove('show');
     return;
@@ -67,8 +88,8 @@ function sbarSetScrollByThumbX(px){
   const trackW  = sbarTrack.clientWidth;
   const thumbW  = sbarThumb.clientWidth;
   const maxLeft = Math.max(0, trackW - thumbW);
-  const clamp   = Math.max(0, Math.min(maxLeft, px));
-  const ratio   = maxLeft ? (clamp / maxLeft) : 0;
+  const clampX  = Math.max(0, Math.min(maxLeft, px));
+  const ratio   = maxLeft ? (clampX / maxLeft) : 0;
   const maxScr  = m.scrollWidth - m.clientWidth;
   m.scrollLeft = ratio * maxScr;
   updateMobileScrollbar(false);
@@ -91,12 +112,22 @@ function endSbarDrag(){ sbar && sbar.classList.remove('dragging'); sbarDrag=null
 
 /* навешиваем обработчики только если элементы есть */
 if (sbarThumb && sbarTrack && sbar){
+  // Pointer
+  sbarThumb.addEventListener('pointerdown', (e)=>{ e.preventDefault(); sbarThumb.setPointerCapture?.(e.pointerId); startSbarDrag(e.clientX); });
+  document.addEventListener('pointermove', (e)=>{ if(sbarDrag) moveSbarDrag(e.clientX); }, {passive:true});
+  document.addEventListener('pointerup', endSbarDrag);
+
+  // Mouse/fallback
   sbarThumb.addEventListener('mousedown', (e)=>{ e.preventDefault(); startSbarDrag(e.clientX); });
   document.addEventListener('mousemove', (e)=>{ if(sbarDrag) moveSbarDrag(e.clientX); });
   document.addEventListener('mouseup', endSbarDrag);
+
+  // Touch/fallback
   sbarThumb.addEventListener('touchstart', (e)=>{ startSbarDrag(e.touches[0].clientX); }, {passive:true});
   document.addEventListener('touchmove',  (e)=>{ if(sbarDrag) moveSbarDrag(e.touches[0].clientX); }, {passive:true});
   document.addEventListener('touchend', endSbarDrag);
+
+  // Клик по треку — переход по месту
   sbarTrack.addEventListener('mousedown', (e)=>{
     if(e.target===sbarThumb) return;
     const rect = sbarTrack.getBoundingClientRect();
@@ -109,7 +140,7 @@ if (sbarThumb && sbarTrack && sbar){
   }, {passive:true});
 }
 
-/* --- spotlight / раскладка --- */
+/* =============================== СПОТЛАЙТ ================================ */
 
 export function chooseAutoSpotlight(){
   if(ctx.pinnedId && ctx.registry.has(ctx.pinnedId)) return ctx.pinnedId;
@@ -129,14 +160,14 @@ export function applyLayout(){
   const tiles = byId('tiles'), main = tilesMain(), rail = tilesRail();
   const mobile = isMobileView() && !ctx.isStageFull;
 
-  // восстановить уничтоженные DOM-элементы
+  // Восстановление уничтоженных DOM-элементов
   ctx.registry.forEach((rec)=>{
     if(!document.body.contains(rec.tile)){
       rec.tile = createTileEl(rec.participant.identity, rec.name, rec.isLocal);
     }
   });
 
-  // если вообще нет плиток, а локальный участник уже есть — вставим заглушку
+  // Если нет плиток, а локальный участник уже есть — вставим заглушку
   if (!document.querySelector('.tile') && ctx.room?.localParticipant){
     const me  = ctx.room.localParticipant;
     const rec = ctx.registry.get(me.identity);
@@ -155,14 +186,14 @@ export function applyLayout(){
     });
     updateUsersCounter();
 
-    // в landscape — равномерная сетка, в портретной мобилке — горизонтальная лента + скроллбар
+    // Ландшафт мобилки — равномерная сетка
     if (isLandscapeMobileNow()){
       settleGrid();
-      // тут НЕ переезжаем насильно на индекс 1 — держим текущую панель;
-      // при первом входе это сделает mountSidebarIntoFootSwipe()
-      alignToActivePane('instant');
+      alignToActivePane('instant'); // удерживаем текущую панель карусели
     } else {
+      // Портрет: горизонтальная лента + скроллбар
       updateMobileScrollbar(true);
+      alignToActivePane('instant'); // и здесь тоже удерживаем карусель
     }
     return;
   }
@@ -195,7 +226,6 @@ export function applyLayout(){
   updateUsersCounter();
 }
 
-/* === Подгон размера спотлайта на десктопе === */
 export function fitSpotlightSize(){
   if (isMobileView() && !ctx.isStageFull) return;
   const main = tilesMain();
@@ -212,7 +242,7 @@ export function fitSpotlightSize(){
   tile.style.height = Math.floor(h) + 'px';
 }
 
-/* === Подсветка активных спикеров === */
+/* Подсветка активных спикеров */
 export function highlightSpeaking(ids){
   const set=new Set(ids);
   document.querySelectorAll('.tile').forEach(t=>t.classList.remove('speaking'));
@@ -221,9 +251,7 @@ export function highlightSpeaking(ids){
   });
 }
 
-/* ========================================================================== */
-/* === MOBILE LANDSCAPE: равномерная сетка одинаковых 16:9 тайлов =========== */
-/* ========================================================================== */
+/* =================== MOBILE LANDSCAPE: равномерная сетка ================== */
 
 function applyEqualGrid(){
   const m = tilesMain();
@@ -282,11 +310,8 @@ window.addEventListener('resize', ()=> { if (isLandscapeMobileNow()) applyEqualG
 window.addEventListener('orientationchange', ()=> { if (isLandscapeMobileNow()) setTimeout(applyEqualGrid, 60); });
 
 /* ========================================================================== */
-/* === Перенос в карусель и порядок панелей: [Подключены][Настройки][Чат] === */
+/* === ФУТЕР-КАРУСЕЛЬ: перенос сайдбара и порядок [Подключены][Настройки][Чат] */
 /* ========================================================================== */
-
-const mqLand = window.matchMedia('(max-width: 950px) and (hover: none) and (pointer: coarse) and (orientation: landscape)');
-const isLandscapeMobileNow = () => mqLand?.matches;
 
 let sidebarMounted = false;
 let sidebarPlaceholder = null;
@@ -300,14 +325,14 @@ let fsScrollHandler = null;
 
 const STORAGE_KEY = 'footPaneIdx_v1';
 
-/* утилиты DOM */
-const getFootSwipe   = () => document.querySelector('.foot-swipe');
-const getFootPanes   = () => {
-  const fs = getFootSwipe();
-  return fs ? Array.from(fs.querySelectorAll('.foot-pane')) : [];
-};
+/* DOM-хелперы для карусели */
+const getFootSwipe = () => qs('.foot-swipe');
+const getFootPanes = () => { const fs = getFootSwipe(); return fs ? qsa('.foot-pane', fs) : []; };
 const getSidebarPane = () => getFootSwipe()?.querySelector('.foot-pane.sidebar-pane') || null;
 const getNonSidebarPanes = () => getFootPanes().filter(p => p !== getSidebarPane());
+const getDotsWrap  = () => qs('.foot-dots');
+const getDots      = () => qsa('.foot-dots .fdot');
+const markDots = (idx)=> getDots().forEach((d,i)=> d.classList.toggle('active', i===idx));
 
 /* «Настройки» — пытаемся найти по .me-card, иначе берём 1-ю не-sidebar */
 function getSettingsPane(){
@@ -334,8 +359,8 @@ function saveActivePaneIdx(){
   try{ sessionStorage.setItem(STORAGE_KEY, String(activePaneIdx)); }catch{}
 }
 
-/* совместимость: внешний код может вызывать это API */
-function scrollFootSwipeToPane(idx, behavior = 'instant'){
+/* Переход к панели по индексу */
+export function scrollFootSwipeToPane(idx, behavior = 'instant'){
   activePaneIdx = Math.max(0, Math.min(idx, getFootPanes().length - 1));
   saveActivePaneIdx();
   alignToActivePane(behavior);
@@ -351,10 +376,13 @@ function alignToActivePane(behavior = 'instant'){
 
   const left = target.offsetLeft;
   suppressDetect = true;
-  fs.scrollTo({ left, behavior });
+  try{ fs.scrollTo({ left, behavior }); }catch{ fs.scrollLeft = left; }
   // двойная/тройная подтяжка — защищаемся от позднего рефлоу
-  requestAnimationFrame(()=> fs.scrollTo({ left, behavior:'instant' }));
-  setTimeout(()=> { fs.scrollTo({ left, behavior:'instant' }); suppressDetect = false; }, 80);
+  requestAnimationFrame(()=> { try{ fs.scrollTo({ left, behavior:'instant' }); }catch{ fs.scrollLeft = left; }});
+  setTimeout(()=> { try{ fs.scrollTo({ left, behavior:'instant' }); }catch{ fs.scrollLeft = left; } suppressDetect = false; }, 80);
+
+  // обновим точки сразу
+  markDots(activePaneIdx);
 }
 
 /* вычислить индекс панели, в которой реально находится центр вьюпорта */
@@ -394,6 +422,7 @@ function attachFsScrollWatcher(){
     t = setTimeout(()=>{
       activePaneIdx = detectActivePaneIdx();
       saveActivePaneIdx();
+      markDots(activePaneIdx);
       t = null;
     }, 100);
   };
@@ -426,7 +455,7 @@ function withPreservedFsScroll(fn, preserve = true){
 function mountSidebarIntoFootSwipe(){
   if (sidebarMounted) return;
 
-  const sidebar   = document.querySelector('.sidebar');
+  const sidebar   = qs('.sidebar');
   const footSwipe = getFootSwipe();
   if (!sidebar || !footSwipe) return;
 
@@ -463,7 +492,7 @@ function mountSidebarIntoFootSwipe(){
   // порядок панелей
   ensureFootSwipeOrder(false);
 
-  // Первый вход в landscape: выбираем сохранённую панель или «настройки»
+  // Первый вход: выбираем сохранённую панель или «настройки»
   if (!footSwipeInitialized){
     const saved = loadSavedPaneIdx();
     if (saved != null){
@@ -481,10 +510,21 @@ function mountSidebarIntoFootSwipe(){
     fsResizeObs = new ResizeObserver(()=> alignToActivePane('instant'));
     fsResizeObs.observe(footSwipe);
 
+    // подключим точки, если есть
+    const dots = getDots();
+    if (dots.length){
+      dots.forEach((dot, i)=>{
+        on(dot, 'click', ()=> scrollFootSwipeToPane(i, 'smooth'));
+        on(dot, 'keydown', (e)=>{ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scrollFootSwipeToPane(i, 'smooth'); }});
+      });
+      markDots(activePaneIdx);
+    }
+
     footSwipeInitialized = true;
   } else {
     // Повторный вход — держим текущую панель
     alignToActivePane('instant');
+    markDots(activePaneIdx);
   }
 }
 
@@ -492,7 +532,7 @@ function mountSidebarIntoFootSwipe(){
 function unmountSidebarFromFootSwipe(){
   if (!sidebarMounted) return;
 
-  const pane = document.querySelector('.foot-pane.sidebar-pane');
+  const pane = qs('.foot-pane.sidebar-pane');
   const list = pane?.querySelector('.list > .list, .list > #onlineList') || pane?.querySelector('.list');
   if (list && sidebarPlaceholder && sidebarPlaceholder.parentElement) {
     sidebarPlaceholder.parentElement.replaceChild(list, sidebarPlaceholder);
@@ -524,23 +564,54 @@ function ensureFootSwipeOrder(preserve = true){
   }, preserve);
 }
 
-/** переключение режимов */
+/** переключение режимов (и для ландшафта, и для портрета мобилки) */
 function handleSidebarRelocation(){
-  if (isLandscapeMobileNow()){
+  if (isCarouselModeNow()){
     mountSidebarIntoFootSwipe();
+    ensureFootSwipeOrder(true);
     alignToActivePane('instant');  // удержать текущую панель
   } else {
     unmountSidebarFromFootSwipe();
   }
 }
 
+/* первичная инициализация */
 handleSidebarRelocation();
 
 /* события окружения */
 mqLand.addEventListener?.('change', handleSidebarRelocation);
+mqPort.addEventListener?.('change', handleSidebarRelocation);
 window.matchMedia('(orientation: landscape)').addEventListener?.('change', handleSidebarRelocation);
+window.matchMedia('(orientation: portrait)').addEventListener?.('change', handleSidebarRelocation);
 window.addEventListener('orientationchange', handleSidebarRelocation);
 window.addEventListener('resize', () => {
   handleSidebarRelocation();
-  if (isLandscapeMobileNow()) alignToActivePane('instant');
+  if (isCarouselModeNow()) alignToActivePane('instant');
 });
+
+/* ========================================================================== */
+/* === Экспортируемое API для внешних модулей =============================== */
+/* ========================================================================== */
+
+export function initLayout(){
+  // счётчик пользователей
+  updateUsersCounter();
+
+  // мобильный скроллбар для плиток (начальная отрисовка)
+  updateMobileScrollbar(true);
+
+  // на всякий случай — периодический пересчёт при изменении DOM плиток
+  const tm = tilesMain();
+  if (tm){
+    on(tm, 'scroll', ()=> queueSbarUpdate(), {passive:true});
+    const ro = new ResizeObserver(()=> queueSbarUpdate(true));
+    ro.observe(tm);
+  }
+
+  // десктоп: подгон спотлайта при старте
+  if (!isMobileView()) fitSpotlightSize();
+}
+
+// Автостарт, но сохраняем экспорт initLayout на случай ручного вызова
+if (document.readyState !== 'loading') initLayout();
+else document.addEventListener('DOMContentLoaded', initLayout);
