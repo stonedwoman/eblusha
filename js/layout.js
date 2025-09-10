@@ -158,8 +158,9 @@ export function chooseAutoSpotlight(){
 
 /* ========== MOBILE SMART ASPECT GRID (16:9 / 9:16, максимальная площадь) ========== */
 
-/** Для одиночной плитки берём AR по ориентации stage: ландшафт 16:9, портрет 9:16 */
-function pickARForSingle(stageAR){
+/** Для одиночной плитки: если тайл помечен 'portrait' → 9:16, иначе по ориентации stage */
+function pickARForSingle(tile, stageAR){
+  if (tile?.classList?.contains?.('portrait')) return 9/16;
   return stageAR >= 1 ? 16/9 : 9/16;
 }
 
@@ -181,7 +182,6 @@ function bestGridForAR(N, W, H, gap, AR){
       const area = cwFill * chFill;
       if (!best || area > best.area)
         best = { mode:'fillWidth', cols, rows, cw:cwFill, ch:chFill, AR, area };
-      // нет смысла пытаться fitHeight, если fillWidth уже поместился лучше/равно
     } else {
       // 2) Подгон по высоте
       const chFit     = hAvail / rows;
@@ -212,8 +212,16 @@ function layoutMobileTiles(){
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
   const stageAR = W / H;
 
-  // канд. AR: 1 плитка — AR по ориентации stage; иначе пробуем оба и выбираем лучший
-  let ARs = N === 1 ? [ pickARForSingle(stageAR) ] : [16/9, 9/16];
+  // канд. AR:
+  // 1 тайл — по его метке .portrait / ориентации stage;
+  // >1 тайла — если портретных больше половины, предпочитаем 9:16.
+  let ARs;
+  if (N === 1) {
+    ARs = [ pickARForSingle(tiles[0], stageAR) ];
+  } else {
+    const portraits = [...tiles].filter(t => t.classList.contains('portrait')).length;
+    ARs = portraits > N/2 ? [9/16, 16/9] : [16/9, 9/16];
+  }
 
   let best = null;
   for (const AR of ARs){
@@ -247,6 +255,64 @@ function layoutMobileTiles(){
   sbar?.classList.remove('show');
 }
 
+/* ===== Авто-детект портретности видео и перерисовка лэйаута ===== */
+
+function updateTileOrientationFromVideo(video){
+  const tile = video.closest?.('.tile');
+  if (!tile) return;
+  const vw = video.videoWidth | 0;
+  const vh = video.videoHeight | 0;
+  if (!vw || !vh) return;
+
+  const isPortrait = vh > vw;
+  const wasPortrait = tile.classList.contains('portrait');
+  if (isPortrait !== wasPortrait){
+    tile.classList.toggle('portrait', isPortrait);
+    if (isMobileView() && !ctx.isStageFull) {
+      layoutMobileTiles();
+    } else {
+      fitSpotlightSize();
+    }
+  }
+}
+
+function attachVideoARWatcher(video){
+  if (!video || video.__arWatchAttached) return;
+  const handler = () => updateTileOrientationFromVideo(video);
+
+  video.addEventListener('loadedmetadata', handler);
+  video.addEventListener('loadeddata', handler);
+  // Chrome/Edge поддерживают 'resize' на <video> при смене потока/энкодера
+  video.addEventListener('resize', handler);
+
+  // первый прогон
+  if (typeof queueMicrotask === 'function') queueMicrotask(handler);
+  else setTimeout(handler, 0);
+
+  video.__arWatchAttached = true;
+}
+
+function observeAllTileVideos(){
+  document.querySelectorAll('.tile video').forEach(attachVideoARWatcher);
+}
+
+let videoMutationObs = null;
+function installVideoARObservers(){
+  const root = tilesMain() || document;
+  if (videoMutationObs) videoMutationObs.disconnect();
+  videoMutationObs = new MutationObserver(muts => {
+    for (const m of muts){
+      m.addedNodes && m.addedNodes.forEach(node=>{
+        if (node.nodeType !== 1) return;
+        if (node.matches?.('video')) attachVideoARWatcher(node);
+        node.querySelectorAll?.('video').forEach(attachVideoARWatcher);
+      });
+    }
+  });
+  videoMutationObs.observe(root, { childList:true, subtree:true });
+  observeAllTileVideos();
+}
+
 /* ======================================================================== */
 
 export function applyLayout(){
@@ -273,7 +339,8 @@ export function applyLayout(){
   if (mobile) {
     tiles.classList.remove('spotlight','single');
     document.querySelectorAll('.tile').forEach(t=>{
-      t.classList.remove('spotlight','thumb','portrait');
+      // НЕ трогаем 'portrait' — авто-детект видео управляет этим классом
+      t.classList.remove('spotlight','thumb');
       // очищаем прямые размеры — будем управлять через aspect-ratio
       t.style.width=''; t.style.height='';
       if (t.parentElement !== main) main.appendChild(t);
@@ -556,7 +623,7 @@ function withPreservedFsScroll(fn, preserve = true){
   }
 }
 
-/** Вставить «Подключены» как ПЕРВУЮ панель (слева) */
+/** Вставить «Подłączены» как ПЕРВУЮ панель (слева) */
 function mountSidebarIntoFootSwipe(){
   if (sidebarMounted) return;
 
@@ -726,6 +793,9 @@ export function initLayout(){
 
   // десктоп: подгон спотлайта при старте
   if (!isMobileView()) fitSpotlightSize();
+
+  // наблюдение за изменениями ориентации видео
+  installVideoARObservers();
 }
 
 // Автостарт, но сохраняем экспорт initLayout на случай ручного вызова
