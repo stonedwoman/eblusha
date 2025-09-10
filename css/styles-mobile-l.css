@@ -104,31 +104,47 @@
   .footer {grid-area: footer;display:block;align-content:center; }
   .sidebar{display:none !important; }
 
-  /* footer carousel */
-  .foot-swipe{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;width:100%;
-  }
-  .foot-swipe::-webkit-scrollbar{ display:none; }
+  /* Footer as swipe carousel */
+.footer{ grid-area:footer; display:block }
 
-  /* ВАЖНО: ширина панели = 100% вьюпорта карусели */
-  .foot-pane{scroll-snap-align:start;flex: 0 0 100%;          /* было: 0 0 0 100% — из-за нуля всё схлопывалось */padding: 12px;min-width: 100%;display:block;           /* не делаем её флекс-контейнером */
-  }
-  .foot-pane:last-child{ border-right:none; }
+/* ГЛАВНОЕ: блокируем вертикаль на контейнере */
+.foot-swipe{
+  display:flex;
+  overflow-x:auto;
+  overflow-y:hidden;                 /* не даём вертикально прокручиваться внутри */
+  scroll-snap-type:x mandatory;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none; -ms-overflow-style:none;
+  width:100%;
+  touch-action: pan-x;               /* жесты — только по X */
+  overscroll-behavior-x: contain;    /* не «протаскивать» скролл на родителя по X */
+  overscroll-behavior-y: none;       /* глушим «резинку» сверху/снизу */
+}
+.foot-swipe::-webkit-scrollbar{ display:none }
 
-  .foot-pane.sidebar-pane .list{margin:0;padding:10px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
-  }
+.foot-pane{
+  scroll-snap-align:start;
+  flex:0 0 100%;
+  min-width:100%;                    /* ширина панели = ширине вьюпорта карусели */
+  padding:12px 12px 0;
+  overflow:hidden;                   /* сразу обе оси, чтобы вложенное не дёргало */
+  /* touch-action можно убрать отсюда — теперь не нужен */
+}
 
-  .btn.send{display:block;width:100%; }
+.foot-pane:last-child{ border-right:none }
+.footer-left{ padding:0; border-right:none }
+.footer-right{ padding:0 }
+.chatbox{ margin:0; height:100% }
 
-  /* dots (пейджер) */
-  .foot-dots{display:flex;justify-content:center;align-items:center;gap:10px;padding:5px;
-  }
-  .foot-dots .fdot{width:12px;height:16px;border-radius:50%;background:transparent;border:2px solid var(--dots);opacity:.85;transform:scale(.95);transition:transform .18s ease, opacity .18s ease, background .18s ease, border-color .18s ease;
-  }
-  .foot-dots .fdot.active{background:var(--dots);border-color:var(--dots);opacity:1;transform:scale(1.1);
-  }
-  .foot-dots .fdot:focus-visible{
-    outline:2px solid rgba(255,255,255,.6);outline-offset:2px;
-  }
+.foot-dots{ display:flex; justify-content:center; align-items:center; gap:10px; padding:5px }
+.foot-dots .fdot{ width:12px; height:16px; border-radius:50%; background:transparent; border:2px solid var(--dots); opacity:.85; transform:scale(.95); transition:transform .18s ease, opacity .18s ease, background .18s ease, border-color .18s ease }
+.foot-dots .fdot.active{ background:var(--dots); border-color:var(--dots); opacity:1; transform:scale(1.1) }
+.foot-dots .fdot:focus-visible{ outline:2px solid rgba(255,255,255,.6); outline-offset:2px }
+
+.btn.send{ margin-top:10px; width:-webkit-fill-available; background:var(--accent); border-color:transparent; display:block }
+#btnShare{ display:none !important }
+.chat-log{ min-height:135px }
+
 
   /* tiles: равномерная сетка 16:9 по центру */
   .tiles{display:flex !important;align-items:center;justify-content:center;height:100%;min-height:0;margin:10px;font-size:14px; /* стабильный размер на моб. горизонтали */
