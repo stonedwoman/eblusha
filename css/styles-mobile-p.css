@@ -34,14 +34,14 @@ html, body{
 #onlineList{
   display:grid;
   grid-template-columns:repeat(2, minmax(0, 1fr));
-  gap:8px
+  gap:8px;
 }
 .user{
   padding:8px;
   border:1px solid var(--line);
   background:var(--panel);
   border-radius:12px;
-  gap:8px
+  gap:8px;
 }
 .user:hover{background:rgba(255,255,255,.03)}
 
@@ -53,37 +53,33 @@ html, body{
   grid-template-columns:1fr !important;
   grid-template-rows:1fr !important;
 }
+
 .tiles-main{
-  display:grid;                       /* было: flex */
+  display:grid;                       /* вместо flex-ленты */
   gap:var(--tile-gap);
   justify-content:center;             /* центрируем по ширине */
   align-content:center;               /* центрируем по высоте */
-  overflow:hidden;                    /* отключаем горизонтальный скролл ленты */
+  overflow:hidden;                    /* отключаем горизонтальный скролл */
   -webkit-overflow-scrolling:auto;    /* сброс */
   overscroll-behavior:contain;
   touch-action:auto;                  /* жесты как обычно */
   scroll-snap-type:none;              /* сброс ленты */
   scroll-padding-inline:0;            /* сброс ленты */
 }
-:root{
-  --m-tile-size: calc(
-    (100vw - env(safe-area-inset-left) - env(safe-area-inset-right)
-     - (2 * var(--m-hpad)) - var(--tile-gap)) / 2
-  );
-}
+
+/* Размер тайла теперь задаёт JS через inline aspect-ratio (16/9 или 9/16) */
 .tile{
   min-height:0;
-  /* было: flex:0 0 var(--m-tile-size); width/height квадрат — убираем */
   flex:none;
   width:100%;
-  height:auto;
-  aspect-ratio:auto;                  /* inline-стиль из JS переопределит (16/9 или 9/16) */
+  height:auto;                        /* aspect-ratio приходит из JS */
+  aspect-ratio:16/9;                  /* безопасный fallback до JS */
   scroll-snap-align:unset;            /* сброс ленты */
 }
 .tile .controls{display:none !important}
-.tile video{width:100%; height:100%; object-fit:cover}
+.tile video{width:100%; height:100%; object-fit:cover; object-position:center}
 
-/* Custom scrollbar bar (для плиток) — отключаем для портретной сетки */
+/* Кастомный скроллбар плиток — скрыт в портретной сетке */
 .tiles-sbar{ display:none !important }
 
 /* ===== Footer as swipe carousel (портрет: 3 панели как в ландшафте) ===== */
@@ -91,73 +87,15 @@ html, body{
   grid-area:footer;
   display:block;
   padding-bottom:env(safe-area-inset-bottom);
+  min-width:0;                        /* чтобы грид-айтем не растягивал контейнер */
 }
+
+/* Контейнер карусели: ширина = 100%, safe-area учитываем padding-ами */
 .foot-swipe{
   display:flex;
-  overflow-x:auto; overflow-y:hidden;
-  scroll-snap-type:x mandatory;
-  -webkit-overflow-scrolling:touch;
-  scrollbar-width:none; -ms-overflow-style:none;
-  overscroll-behavior:contain;   /* не прокручиваем страницу вертикально */
-  touch-action:pan-x;
-  gap:0;
+  width:100%;
+  min-width:0;
   height:var(--footer-h, 260px);
-  scroll-padding-inline:0;
-}
-.foot-swipe::-webkit-scrollbar{display:none}
-
-/* Порядок панелей и ровно три штуки */
-.foot-pane{
-  scroll-snap-align:start;
-  scroll-snap-stop:always;
-  flex:0 0 100%;
-  padding:12px; padding-bottom:0; padding-top:0;
-  overflow-y:hidden; overscroll-behavior-y:none;
-  min-width:calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right));
-  height:100%;
-}
-
-/* порядок: [Подключены][Настройки][Чат] */
-.foot-pane.pane-connected{ order:1; }
-.foot-pane.pane-settings { order:2; }
-.foot-pane.pane-chat     { order:3; }
-
-.foot-pane:last-child{border-right:none}
-.footer-left{padding:0; border-right:none}
-.footer-right{padding:0}
-.chatbox{margin:0; height:100%}
-
-/* Пейджер */
-.foot-dots{
-  display:flex; justify-content:center; align-items:center;
-  gap:10px; padding:5px
-}
-.foot-dots .fdot{
-  width:12px; height:16px; border-radius:50%;
-  background:transparent; border:2px solid var(--dots);
-  opacity:.85; transform:scale(.95);
-  transition:transform .18s ease, opacity .18s ease, background .18s ease, border-color .18s ease
-}
-.foot-dots .fdot.active{
-  background:var(--dots); border-color:var(--dots);
-  opacity:1; transform:scale(1.1)
-}
-.foot-dots .fdot:focus-visible{outline:2px solid rgba(255,255,255,.6); outline-offset:2px}
-
-/* Кнопки / чат */
-.btn.send{
-  margin-top:10px;
-  width:-webkit-fill-available;
-  background:var(--accent);
-  border-color:transparent;
-  display:block
-}
-#btnShare{display:none !important}
-.chat-log{min-height:135px;}
-
-/* контейнер карусели учитывает safe-area, а не панель */
-.foot-swipe{
-  display:flex;
   overflow-x:auto; overflow-y:hidden;
   scroll-snap-type:x mandatory;
   -webkit-overflow-scrolling:touch;
@@ -165,47 +103,57 @@ html, body{
   overscroll-behavior:contain;
   touch-action:pan-x;
   gap:0;
-  height:var(--footer-h, 260px);
   scroll-padding-inline:0;
-
-  /* ВАЖНО: переносим «вырезы» сюда */
+  box-sizing:border-box;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
+.foot-swipe::-webkit-scrollbar{display:none}
 
-/* каждая панель ровно шириной контейнера */
+/* Каждая панель — ровно шириной контейнера */
 .foot-pane{
+  flex:0 0 100%;
+  width:auto;
+  min-width:0;                        /* не шириться сверх контейнера */
+  height:100%;
+  box-sizing:border-box;
+  padding:12px 12px 0 12px;
+
   scroll-snap-align:start;
   scroll-snap-stop:always;
-  flex:0 0 100%;
-  /* было: min-width: calc(100vw - env(...)); — УДАЛИТЬ */
-  min-width:100%;
-  height:100%;
-  padding:12px 12px 0 12px;
-  overflow-y:hidden; overscroll-behavior-y:none;
 
-  /* чтобы padding не расширял панель */
-  box-sizing:border-box;
-}
-/* ==== FIX: корректная ширина карусели и панелей ==== */
-
-/* grid-item по умолчанию min-width:auto → может растягивать контейнер */
-.footer{ min-width:0; }
-
-/* сам контейнер карусели — без минималок, учёт safe-area в padding */
-.foot-swipe{
-  width:100%;
-  min-width:0;               /* чтобы не ширился больше грида */
-  padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
-  box-sizing:border-box;
-  height: auto;
+  overflow-y:hidden;
+  overscroll-behavior-y:none;
 }
 
-/* панель = ровно ширина контейнера, без старых min-width */
-.footer .foot-swipe > .foot-pane{
-  flex: 0 0 100% !important; /* ширина панели определяется flex-basis */
-  width: auto !important;    /* не фиксируем width жёстко */
-  min-width: 0 !important;   /* сбиваем любые унаследованные min-width */
-  box-sizing: border-box;
-  padding:0 12px 0;
+/* Опционально: порядок (на случай, если DOM не переставлен JS-ом) */
+.foot-pane.pane-connected{ order:1; }
+.foot-pane.pane-settings { order:2; }
+.foot-pane.pane-chat     { order:3; }
+
+/* Мелочи */
+.foot-pane:last-child{border-right:none}
+.footer-left{padding:0; border-right:none}
+.footer-right{padding:0}
+.chatbox{margin:0; height:100%}
+.chat-log{min-height:135px;}
+#btnShare{display:none !important}
+
+/* Пейджер */
+.foot-dots{
+  display:flex; justify-content:center; align-items:center;
+  gap:10px; padding:5px;
+}
+.foot-dots .fdot{
+  width:12px; height:16px; border-radius:50%;
+  background:transparent; border:2px solid var(--dots);
+  opacity:.85; transform:scale(.95);
+  transition:transform .18s ease, opacity .18s ease, background .18s ease, border-color .18s ease;
+}
+.foot-dots .fdot.active{
+  background:var(--dots); border-color:var(--dots);
+  opacity:1; transform:scale(1.1);
+}
+.foot-dots .fdot:focus-visible{
+  outline:2px solid rgba(255,255,255,.6); outline-offset:2px;
 }

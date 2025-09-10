@@ -1,6 +1,6 @@
 // layout.js
 import { ctx } from "./state.js";
-import { byId, isMobileView, isMobileLandscape } from "./utils.js";
+import { byId, isMobileView } from "./utils.js";
 import { createTileEl, tilesMain, tilesRail } from "./tiles.js";
 import { usersCounterText } from "./registry.js";
 
@@ -78,7 +78,7 @@ export function updateMobileScrollbar(forceShow){
   }
 }
 
-/* безопасная подписка на скролл tiles-main */
+/* безопасная подписка на скролл tiles-main (если элемент уже есть) */
 const _m = tilesMain();
 _m && _m.addEventListener('scroll', ()=> updateMobileScrollbar(false), {passive:true});
 window.addEventListener('resize',  ()=> updateMobileScrollbar(false));
@@ -623,7 +623,7 @@ function withPreservedFsScroll(fn, preserve = true){
   }
 }
 
-/** Вставить «Подłączены» как ПЕРВУЮ панель (слева) */
+/** Вставить «Подключены» как ПЕРВУЮ панель (слева) */
 function mountSidebarIntoFootSwipe(){
   if (sidebarMounted) return;
 
