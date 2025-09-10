@@ -28,42 +28,21 @@
 .tiles-sbar.dragging .thumb{cursor:grabbing}
 
 /* Footer as swipe carousel */
-.footer{ grid-area:footer; display:block }
+.footer{grid-area:footer; display:block}
+.foot-swipe{display:flex; overflow-x:scroll ; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;overflow-y: hidden}
+.foot-swipe::-webkit-scrollbar{display:none}
+.foot-pane{scroll-snap-align:start; flex:0 0 100%; padding:12px; padding-bottom:0; padding-top:0;overflow-y: hidden;touch-action: pan-x;
+        overscroll-behavior-y: none;}
+.foot-pane:last-child{border-right:none}
+.footer-left{padding:0; border-right:none}
+.footer-right{padding:0}
+.chatbox{margin:0; height:100%}
 
-/* ГЛАВНОЕ: блокируем вертикаль на контейнере */
-.foot-swipe{
-  display:flex;
-  overflow-x:auto;
-  overflow-y:hidden;                 /* не даём вертикально прокручиваться внутри */
-  scroll-snap-type:x mandatory;
-  -webkit-overflow-scrolling:touch;
-  scrollbar-width:none; -ms-overflow-style:none;
-  width:100%;
-  touch-action: pan-x;               /* жесты — только по X */
-  overscroll-behavior-x: contain;    /* не «протаскивать» скролл на родителя по X */
-  overscroll-behavior-y: none;       /* глушим «резинку» сверху/снизу */
-}
-.foot-swipe::-webkit-scrollbar{ display:none }
+.foot-dots{display:flex; justify-content:center; align-items:center; gap:10px; padding:5px}
+.foot-dots .fdot{width:12px; height:16px; border-radius:50%; background:transparent; border:2px solid var(--dots); opacity:.85; transform:scale(.95); transition:transform .18s ease, opacity .18s ease, background .18s ease, border-color .18s ease}
+.foot-dots .fdot.active{background:var(--dots); border-color:var(--dots); opacity:1; transform:scale(1.1)}
+.foot-dots .fdot:focus-visible{outline:2px solid rgba(255,255,255,.6); outline-offset:2px}
 
-.foot-pane{
-  scroll-snap-align:start;
-  flex:0 0 100%;
-  min-width:100%;                    /* ширина панели = ширине вьюпорта карусели */
-  padding:12px 12px 0;
-  overflow:hidden;                   /* сразу обе оси, чтобы вложенное не дёргало */
-  /* touch-action можно убрать отсюда — теперь не нужен */
-}
-
-.foot-pane:last-child{ border-right:none }
-.footer-left{ padding:0; border-right:none }
-.footer-right{ padding:0 }
-.chatbox{ margin:0; height:100% }
-
-.foot-dots{ display:flex; justify-content:center; align-items:center; gap:10px; padding:5px }
-.foot-dots .fdot{ width:12px; height:16px; border-radius:50%; background:transparent; border:2px solid var(--dots); opacity:.85; transform:scale(.95); transition:transform .18s ease, opacity .18s ease, background .18s ease, border-color .18s ease }
-.foot-dots .fdot.active{ background:var(--dots); border-color:var(--dots); opacity:1; transform:scale(1.1) }
-.foot-dots .fdot:focus-visible{ outline:2px solid rgba(255,255,255,.6); outline-offset:2px }
-
-.btn.send{ margin-top:10px; width:-webkit-fill-available; background:var(--accent); border-color:transparent; display:block }
-#btnShare{ display:none !important }
-.chat-log{ min-height:135px }
+.btn.send{margin-top:10px; width:-webkit-fill-available; background:var(--accent); border-color:transparent; display:block}
+#btnShare{display:none !important}
+.chat-log{min-height: 135px;}
