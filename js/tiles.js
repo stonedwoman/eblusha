@@ -304,9 +304,18 @@ function layoutUniformGrid(){
 
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
 
+<<<<<<< HEAD
   const cellAR = pickCellAR(tiles);
 
   // подберём число колонок (1..N)
+=======
+  // AR ячейки берём по «большинству» тайлов; 1:1 — как запасной
+  const ars = tiles.map(getTileAR);
+  const portraits = ars.filter(a=>a<1).length;
+  const cellAR = portraits > N/2 ? 9/16 : 16/9;
+
+  // ищем число колонок, чтобы занять максимум пространства
+>>>>>>> parent of 667728d (0.87)
   let best = null;
 
   function packAndMeasure(cols){
@@ -314,6 +323,7 @@ function layoutUniformGrid(){
     if (cw <= 0) return null;
     const ch = cw / cellAR;
 
+<<<<<<< HEAD
     // превратим список тайлов в юниты
     const items = tiles.map(el=>{
       if (hasVideo(el)){
@@ -337,9 +347,28 @@ function layoutUniformGrid(){
       } else {
         row.push(it); used += it.span;
       }
+=======
+    // стремимся к максимальной площади клетки, но чтобы всё влазило
+    const hByW = cellWAvail / cellAR;
+    const wByH = cellHAvail * cellAR;
+
+    let cw, ch;
+    if (hByW <= cellHAvail && wByH <= cellWAvail){
+      // оба подходят — возьмём, что больше по площади
+      const areaW = cellWAvail * hByW;
+      const areaH = wByH * cellHAvail;
+      if (areaW >= areaH){ cw = cellWAvail; ch = hByW; } else { cw = wByH; ch = cellHAvail; }
+    } else if (hByW <= cellHAvail){
+      cw = cellWAvail; ch = hByW;
+    } else if (wByH <= cellWAvail){
+      cw = wByH; ch = cellHAvail;
+    } else {
+      return null;
+>>>>>>> parent of 667728d (0.87)
     }
     if (row.length) rows.push(row);
 
+<<<<<<< HEAD
     const totalH = rows.length * ch + gap*(rows.length-1);
 
     // метрика: 1) не превышать высоту, 2) ближе к H, 3) меньше «пустых» ячеек
@@ -352,6 +381,13 @@ function layoutUniformGrid(){
     const score = (fits?0:10000) + Math.abs(H-totalH) + blanks*5;
 
     return { cols, cw, ch, rows, totalH, blanks, score };
+=======
+    const filledW = cw * cols + gap * (cols - 1);
+    const filledH = ch * rows + gap * (rows - 1);
+    const util = (filledW / W) * (filledH / H);
+    const area = cw * ch;
+    return { cols, rows, cw, ch, util, area };
+>>>>>>> parent of 667728d (0.87)
   }
 
   for (let cols=1; cols<=N; cols++){
@@ -361,11 +397,16 @@ function layoutUniformGrid(){
   }
   if (!best){ clearGrid(); return; }
 
+<<<<<<< HEAD
   // раскладываем
+=======
+  // Раскладываем абсолютно по одинаковым боксам
+>>>>>>> parent of 667728d (0.87)
   m.style.position = 'relative';
   m.classList.add('grid-active');
 
   const px = (v)=> Math.round(v) + 'px';
+<<<<<<< HEAD
   const { cw, ch, rows } = best;
 
   let y = 0;
@@ -391,6 +432,26 @@ function layoutUniformGrid(){
   }
 
   m.style.height = px(y - gap);
+=======
+  const { cols, rows, cw, ch } = best;
+
+  tiles.forEach((el, i)=>{
+    const r = Math.floor(i / cols);
+    const c = i % cols;
+    const left = c * (cw + gap);
+    const top  = r * (ch + gap);
+
+    el.style.boxSizing = 'border-box';
+    el.style.position = 'absolute';
+    el.style.left = px(left);
+    el.style.top  = px(top);
+    el.style.setProperty('width',  px(cw), 'important');
+    el.style.setProperty('height', px(ch), 'important');
+    el.style.aspectRatio = ''; // управляем width/height
+  });
+
+  m.style.height = px(rows * ch + gap * (rows - 1));
+>>>>>>> parent of 667728d (0.87)
   tiles.forEach(t=> t.classList.remove('spotlight','thumb'));
 }
 
