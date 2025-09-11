@@ -153,6 +153,13 @@ export function setTileAspectFromVideo(tile, videoEl){
   setPortraitFlag(tile, w, h);
   tile.dataset.ar  = (w>0 && h>0) ? (w/h).toFixed(6) : '';
   tile.dataset.vid = '1'; // метка «есть видео»
+
+  // ВАЖНО: видео всегда рисуем своим AR внутри фиксированного бокса
+  videoEl.style.width = '100%';
+  videoEl.style.height = '100%';
+  videoEl.style.objectFit = 'contain';   // чтобы портрет не «резался» по бокам
+  videoEl.style.objectPosition = 'center';
+
   if (isMobileGrid()){
     requestLayout();
   } else if (tile.classList.contains('spotlight')) {
@@ -212,6 +219,12 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
   v.classList.add('media');
   tile.dataset.vid = newId || '1';
   tile.prepend(v);
+
+  // видео — своим AR внутри бокса
+  v.style.width = '100%';
+  v.style.height = '100%';
+  v.style.objectFit = 'contain';
+  v.style.objectPosition = 'center';
 
   if(isLocal && !identity.includes('#screen')) applyCamTransformsTo(v);
 
@@ -312,7 +325,7 @@ function layoutUniformGrid(){
   m.style.width = '100%';
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
 
-  // AR ячейки берём по большинству; 1:1 не нужен — все боксы одинаковые
+  // AR ячейки берём по большинству
   const ars = tiles.map(getTileAR);
   const portraits = ars.filter(a=>a<1).length;
   const cellAR = portraits > N/2 ? 9/16 : 16/9;
@@ -361,7 +374,7 @@ function layoutUniformGrid(){
 
   // активируем режим, как ждёт CSS
   m.style.position = 'relative';
-  m.classList.add('mosaic-active');     // <= КЛЮЧЕВОЕ (вместо grid-active)
+  m.classList.add('mosaic-active');
 
   const px = (v)=> Math.round(v) + 'px';
   const { cols, rows, cw, ch } = best;
@@ -372,19 +385,17 @@ function layoutUniformGrid(){
     const left = c * (cw + gap);
     const top  = r * (ch + gap);
 
-    // координаты — инлайном
     el.style.position = 'absolute';
     el.style.left = px(left);
     el.style.top  = px(top);
 
-    // размеры — и через CSS-переменные, и дублером инлайном (на всякий случай)
     el.style.setProperty('--mw', px(cw));
     el.style.setProperty('--mh', px(ch));
     el.style.setProperty('width',  px(cw), 'important');
     el.style.setProperty('height', px(ch), 'important');
 
     el.style.boxSizing = 'border-box';
-    el.style.aspectRatio = ''; // управляем width/height
+    el.style.aspectRatio = '';
   });
 
   m.style.height = px(rows * ch + gap * (rows - 1));
