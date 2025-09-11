@@ -7,7 +7,6 @@ import { fitSpotlightSize } from "./layout.js";
 export function tilesMain(){ return byId('tilesMain'); }
 export function tilesRail(){ return byId('tilesRail'); }
 export function tilesHost(){ return byId('tiles'); }     // поле раскладки
-export function tilesHost(){ return byId('tiles'); } // поле раскладки (#tiles)
 export function getLocalTileVideo(){ return document.querySelector('.tile.me video'); }
 
 function isMobileGrid(){ return isMobileView() && !ctx.isStageFull; }
