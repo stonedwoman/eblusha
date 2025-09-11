@@ -1,7 +1,13 @@
 // tiles.js — uniform mobile grid: одинаковые боксы; видео внутри со своим AR
 import { ctx, state } from "./state.js";
 import { byId, hashColor, isMobileView } from "./utils.js";
-import { fitSpotlightSize } from "./layout.js";
+// ⬇️ вместо жесткого именованного импорта — опциональная, ленивая подгрузка
+let fitSpotlightSize = ()=>{};
+try {
+  import("./layout.js").then(m=>{
+    if (typeof m.fitSpotlightSize === "function") fitSpotlightSize = m.fitSpotlightSize;
+  });
+} catch (_) {}
 
 /* ===== DOM helpers ===== */
 export function tilesMain(){ return byId('tilesMain'); }
@@ -150,21 +156,9 @@ export function setTileAspectFromVideo(tile, videoEl){
   const w = videoEl.videoWidth | 0;
   const h = videoEl.videoHeight | 0;
   if (!w || !h) return;
-
-  // помечаем портретность, сохраняем точный AR
   setPortraitFlag(tile, w, h);
   tile.dataset.ar  = (w>0 && h>0) ? (w/h).toFixed(6) : '';
-  tile.dataset.vid = tile.dataset.vid || '1'; // метка «есть видео»
-
-  // ВАЖНО: видео внутри тайла сохраняет свой AR (без обрезания)
-  try{
-    videoEl.style.width = '100%';
-    videoEl.style.height = '100%';
-    videoEl.style.objectFit = 'contain';   // вся картинка целиком (pillar/letterbox)
-    videoEl.style.objectPosition = 'center';
-    videoEl.style.display = 'block';
-  }catch{}
-
+  tile.dataset.vid = '1'; // метка «есть видео»
   if (isMobileGrid()){
     requestLayout();
   } else if (tile.classList.contains('spotlight')) {
@@ -324,11 +318,12 @@ function layoutUniformGrid(){
   m.style.width = '100%';
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
 
-  // AR ячейки по большинству (для подбора cw/ch); все тайлы — один размер
+  // AR ячейки берём по большинству
   const ars = tiles.map(getTileAR);
   const portraits = ars.filter(a=>a<1).length;
   const cellAR = portraits > N/2 ? 9/16 : 16/9;
 
+  // ищем число колонок
   let best = null;
   function tryCols(cols){
     const rows = Math.ceil(N / cols);
@@ -370,8 +365,9 @@ function layoutUniformGrid(){
   }
   if (!best){ clearGrid(); return; }
 
+  // активируем режим, как ждёт CSS
   m.style.position = 'relative';
-  m.classList.add('mosaic-active'); // соответствует mobile CSS
+  m.classList.add('mosaic-active');     // <= режим для CSS
 
   const px = (v)=> Math.round(v) + 'px';
   const { cols, rows, cw, ch } = best;
@@ -386,10 +382,9 @@ function layoutUniformGrid(){
     el.style.left = px(left);
     el.style.top  = px(top);
 
-    // размеры (и CSS-переменные для совместимости со стилями)
     el.style.setProperty('--mw', px(cw));
     el.style.setProperty('--mh', px(ch));
-    el.style.setProperty('width',  px(cw), 'important');   // перебиваем возможные !important
+    el.style.setProperty('width',  px(cw), 'important');
     el.style.setProperty('height', px(ch), 'important');
 
     el.style.boxSizing = 'border-box';
