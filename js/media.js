@@ -1,7 +1,7 @@
 // MIC, CAMERA, SCREEN, FACING
 import { ctx, state } from "./state.js";
 import { byId, isMobileView } from "./utils.js";
-import { applyLayout } from "./layout.js";
+import * as layout from "./layout.js";
 import {
   attachVideoToTile,
   showAvatarInTile,

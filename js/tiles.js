@@ -468,6 +468,10 @@ tm && tilesMutObs.observe(tm, {
 /* Экспорт */
 export function relayoutTilesIfMobile(){
   if (isMobileGrid()) layoutUniformGrid(); else clearGrid();
+<<<<<<< HEAD
 }
 
 
+=======
+}
+>>>>>>> parent of 9fedd47 (0.88)
