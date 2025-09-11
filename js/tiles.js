@@ -8,7 +8,8 @@ export function tilesMain(){ return byId('tilesMain'); }
 export function tilesRail(){ return byId('tilesRail'); }
 export function getLocalTileVideo(){ return document.querySelector('.tile.me video'); }
 
-const isMobileMosaic = () => isMobileView() && !ctx.isStageFull;
+function isMobileMosaic(){ return isMobileView() && !ctx.isStageFull; };
+
 
 /* ==== Overlay (как было) ==== */
 const ov = byId('tileOverlay');
