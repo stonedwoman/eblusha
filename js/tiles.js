@@ -2,7 +2,8 @@
 // но видео-тайлы растягиваются по своему AR на кратное число колонок.
 import { ctx, state } from "./state.js";
 import { byId, hashColor, isMobileView } from "./utils.js";
-import { fitSpotlightSize } from "./layout.js";
+// ⬇️ важное отличие: больше НЕТ именованного импорта
+import * as layout from "./layout.js";
 
 /* ===== DOM helpers ===== */
 export function tilesMain(){ return byId('tilesMain'); }
@@ -117,7 +118,8 @@ export function setTileAspectFromVideo(tile, videoEl){
   if (isMobileGrid()){
     requestLayout();
   } else if (tile.classList.contains('spotlight')) {
-    fitSpotlightSize();
+    // безопасный (необязательный) вызов из layout.js
+    layout?.fitSpotlightSize?.();
   }
 }
 
@@ -205,7 +207,7 @@ export function showAvatarInTile(identity){
     ph.innerHTML=`<div class="avatar-ph">${(t.dataset.name||'?').slice(0,1).toUpperCase()}</div>`;
     t.prepend(ph);
   }
-  if (t.classList.contains('spotlight')) fitSpotlightSize();
+  if (t.classList.contains('spotlight')) layout?.fitSpotlightSize?.();
   requestLayout();
 }
 
@@ -261,8 +263,6 @@ function pickCellAR(tiles){
   const ars = ph.map(getTileAR);
   const portraits = ars.filter(a=>a<1).length;
   const majority = portraits > ph.length/2 ? (9/16) : (16/9);
-  // попробуем также квадрат как запасной
-  // вернём тот, который ближе к среднему по «фантомным» AR плейсхолдеров
   const avg = ars.reduce((s,a)=>s+a,0)/ars.length;
   const cand = [majority, 1];
   let best=cand[0], d=Math.abs(avg-best);
@@ -306,8 +306,7 @@ function layoutUniformGrid(){
 
   const cellAR = pickCellAR(tiles);
 
-  // подберём число колонок (1..N): при размещении элементами-«юнитами»
-  // (обычная плитка = 1 юнит, видео = round(AR_video/cellAR) юнитов)
+  // подберём число колонок (1..N)
   let best = null;
 
   function packAndMeasure(cols){
@@ -319,9 +318,9 @@ function layoutUniformGrid(){
     const items = tiles.map(el=>{
       if (hasVideo(el)){
         let ar = getVideoAR(el);
-        if (!(ar>0 && isFinite(ar))) ar = cellAR; // на всякий
+        if (!(ar>0 && isFinite(ar))) ar = cellAR;
         let span = Math.max(1, Math.round(ar / cellAR));
-        span = Math.min(span, cols); // не больше строки
+        span = Math.min(span, cols);
         return { el, type:'vid', span, ar };
       } else {
         return { el, type:'ph', span:1, ar:cellAR };
@@ -367,7 +366,7 @@ function layoutUniformGrid(){
   m.classList.add('grid-active');
 
   const px = (v)=> Math.round(v) + 'px';
-  const { cols, cw, ch, rows } = best;
+  const { cw, ch, rows } = best;
 
   let y = 0;
   for (const r of rows){

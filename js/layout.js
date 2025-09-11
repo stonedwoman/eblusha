@@ -1,13 +1,17 @@
 // tiles.js — uniform mobile grid: одинаковые боксы; видео внутри со своим AR
 import { ctx, state } from "./state.js";
 import { byId, hashColor, isMobileView } from "./utils.js";
-// ⬇️ вместо жесткого именованного импорта — опциональная, ленивая подгрузка
-let fitSpotlightSize = ()=>{};
-try {
-  import("./layout.js").then(m=>{
-    if (typeof m.fitSpotlightSize === "function") fitSpotlightSize = m.fitSpotlightSize;
-  });
-} catch (_) {}
+
+/* ===== безопасный вызов fitSpotlightSize без импорта ===== */
+function callFitSpotlightSize() {
+  try {
+    const fn =
+      (globalThis.layout && globalThis.layout.fitSpotlightSize) ||
+      globalThis.fitSpotlightSize ||
+      globalThis.__fitSpotlightSize;
+    if (typeof fn === "function") fn();
+  } catch {}
+}
 
 /* ===== DOM helpers ===== */
 export function tilesMain(){ return byId('tilesMain'); }
@@ -119,8 +123,8 @@ function stopVideoARWatcher(v){
   if(!st) return;
   try{
     v.removeEventListener('loadedmetadata', st.onMeta);
-    v.removeEventListener('loadeddata', st.onMeta);
-    v.removeEventListener('resize', st.onMeta);
+    v.removeEventListener('loadeddata',   st.onMeta);
+    v.removeEventListener('resize',       st.onMeta);
   }catch{}
   if (st.rfcb && v.cancelVideoFrameCallback){ try{ v.cancelVideoFrameCallback(st.rfcb); }catch{} }
   if (st.timer){ clearInterval(st.timer); }
@@ -162,7 +166,7 @@ export function setTileAspectFromVideo(tile, videoEl){
   if (isMobileGrid()){
     requestLayout();
   } else if (tile.classList.contains('spotlight')) {
-    fitSpotlightSize();
+    callFitSpotlightSize();
   }
 }
 
@@ -253,7 +257,7 @@ export function showAvatarInTile(identity){
     ph.innerHTML=`<div class="avatar-ph">${(t.dataset.name||'?').slice(0,1).toUpperCase()}</div>`;
     t.prepend(ph);
   }
-  if (t.classList.contains('spotlight')) fitSpotlightSize();
+  if (t.classList.contains('spotlight')) callFitSpotlightSize();
   requestLayout();
 }
 
