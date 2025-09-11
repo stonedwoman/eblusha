@@ -1,12 +1,10 @@
-// ===== Mobile Portrait layout (smart AR grid + scrollbar + footer carousel) =====
+// ===== Mobile Portrait layout (mosaic from tiles.js + scrollbar + footer carousel) =====
 import { ctx } from "../state.js";
 import { byId, isMobileView } from "../utils.js";
-import { createTileEl, tilesMain } from "../tiles.js";
+import { createTileEl, tilesMain, relayoutTilesIfMobile } from "../tiles.js";
 import { usersCounterText } from "../registry.js";
 
 /* ----------------------------- Утилиты ----------------------------------- */
-const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
-const raf = (fn) => requestAnimationFrame(fn);
 const on = (el, ev, fn, opts) => el && el.addEventListener(ev, fn, opts);
 const qs = (sel, root=document) => root.querySelector(sel);
 const qsa = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -87,7 +85,6 @@ function startSbarDrag(clientX){
 }
 function moveSbarDrag(clientX){
   if(!sbarDrag) return;
-  const track  = getSbarTrack();
   const delta = clientX - sbarDrag.startX;
   sbarSetScrollByThumbX(sbarDrag.startLeft + delta);
 }
@@ -98,22 +95,18 @@ function attachSbarEvents(){
   if (!(sbar && track && thumb) || sbar.__sbarBound) return;
   sbar.__sbarBound = true;
 
-  // Pointer
   thumb.addEventListener('pointerdown', (e)=>{ e.preventDefault(); thumb.setPointerCapture?.(e.pointerId); startSbarDrag(e.clientX); });
   document.addEventListener('pointermove', (e)=>{ if(sbarDrag) moveSbarDrag(e.clientX); }, {passive:true});
   document.addEventListener('pointerup', endSbarDrag);
 
-  // Mouse/fallback
   thumb.addEventListener('mousedown', (e)=>{ e.preventDefault(); startSbarDrag(e.clientX); });
   document.addEventListener('mousemove', (e)=>{ if(sbarDrag) moveSbarDrag(e.clientX); });
   document.addEventListener('mouseup', endSbarDrag);
 
-  // Touch/fallback
   thumb.addEventListener('touchstart', (e)=>{ startSbarDrag(e.touches[0].clientX); }, {passive:true});
   document.addEventListener('touchmove',  (e)=>{ if(sbarDrag) moveSbarDrag(e.touches[0].clientX); }, {passive:true});
   document.addEventListener('touchend', endSbarDrag);
 
-  // Click-to-jump
   track.addEventListener('mousedown', (e)=>{
     if(e.target===thumb) return;
     const rect = track.getBoundingClientRect();
@@ -124,139 +117,6 @@ function attachSbarEvents(){
     const rect = track.getBoundingClientRect();
     sbarSetScrollByThumbX(e.touches[0].clientX - rect.left - thumb.clientWidth/2);
   }, {passive:true});
-}
-
-/* ========== SMART ASPECT GRID (16:9 / 9:16, максимальная площадь) ========= */
-function pickARForSingle(tile, stageAR){
-  if (tile?.classList?.contains?.('portrait')) return 9/16;
-  return stageAR >= 1 ? 16/9 : 9/16;
-}
-function bestGridForAR(N, W, H, gap, AR){
-  let best = null;
-  for (let cols = 1; cols <= N; cols++){
-    const rows   = Math.ceil(N / cols);
-    const wAvail = W - gap * (cols - 1);
-    const hAvail = H - gap * (rows - 1);
-    if (wAvail <= 0 || hAvail <= 0) continue;
-
-    const cwFill     = wAvail / cols;
-    const chFill     = cwFill / AR;
-    const totalHFill = rows * chFill + gap * (rows - 1);
-
-    if (totalHFill <= H + 0.5){
-      const area = cwFill * chFill;
-      if (!best || area > best.area)
-        best = { mode:'fillWidth', cols, rows, cw:cwFill, ch:chFill, AR, area };
-    } else {
-      const chFit     = hAvail / rows;
-      const cwFit     = chFit * AR;
-      const totalWFit = cols * cwFit + gap * (cols - 1);
-      if (cwFit > 0 && totalWFit <= W + 0.5){
-        const area = cwFit * chFit;
-        if (!best || area > best.area)
-          best = { mode:'fitHeight', cols, rows, cw:cwFit, ch:chFit, AR, area };
-      }
-    }
-  }
-  return best;
-}
-function layoutMobileTiles(){
-  const m = tilesMain(); if (!m) return;
-  const tiles = m.querySelectorAll('.tile'); const N = tiles.length;
-  if (!N) return;
-
-  const box = m.getBoundingClientRect();
-  const W = Math.max(0, box.width);
-  const H = Math.max(0, box.height);
-  if (W < 10 || H < 10){ requestAnimationFrame(layoutMobileTiles); return; }
-
-  const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
-  const stageAR = W / H;
-
-  let ARs;
-  if (N === 1) {
-    ARs = [ pickARForSingle(tiles[0], stageAR) ];
-  } else {
-    const portraits = [...tiles].filter(t => t.classList.contains('portrait')).length;
-    ARs = portraits > N/2 ? [9/16, 16/9] : [16/9, 9/16];
-  }
-
-  let best = null;
-  for (const AR of ARs){
-    const cand = bestGridForAR(N, W, H, gap, AR);
-    if (cand && (!best || cand.area > best.area)) best = cand;
-  }
-  if (!best) return;
-
-  m.style.display = 'grid';
-  m.style.gap = `${gap}px`;
-  m.style.gridAutoFlow = 'row';
-  m.style.alignContent = 'center';
-  m.style.justifyContent = 'center';
-
-  if (best.mode === 'fillWidth'){
-    m.style.gridTemplateColumns = `repeat(${best.cols}, 1fr)`;
-  } else {
-    m.style.gridTemplateColumns = `repeat(${best.cols}, ${Math.floor(best.cw)}px)`;
-  }
-
-  const arCSS = best.AR > 1 ? '16 / 9' : '9 / 16';
-  tiles.forEach(t => {
-    t.style.width = '100%';
-    t.style.height = 'auto';
-    t.style.aspectRatio = arCSS;
-  });
-
-  // горизонтального скролла не будет
-  getSbar()?.classList.remove('show');
-}
-
-/* ===== Авто-детект портретности видео и перерисовка ===== */
-function updateTileOrientationFromVideo(video){
-  const tile = video.closest?.('.tile');
-  if (!tile) return;
-  const vw = video.videoWidth | 0;
-  const vh = video.videoHeight | 0;
-  if (!vw || !vh) return;
-
-  const isPortrait = vh > vw;
-  const wasPortrait = tile.classList.contains('portrait');
-  if (isPortrait !== wasPortrait){
-    tile.classList.toggle('portrait', isPortrait);
-    if (isMobileView() && !ctx.isStageFull) layoutMobileTiles();
-  }
-}
-function attachVideoARWatcher(video){
-  if (!video || video.__arWatchAttached) return;
-  const handler = () => updateTileOrientationFromVideo(video);
-
-  video.addEventListener('loadedmetadata', handler);
-  video.addEventListener('loadeddata', handler);
-  video.addEventListener('resize', handler);
-
-  if (typeof queueMicrotask === 'function') queueMicrotask(handler);
-  else setTimeout(handler, 0);
-
-  video.__arWatchAttached = true;
-}
-function observeAllTileVideos(){
-  document.querySelectorAll('.tile video').forEach(attachVideoARWatcher);
-}
-let videoMutationObs = null;
-function installVideoARObservers(){
-  const root = tilesMain() || document;
-  if (videoMutationObs) videoMutationObs.disconnect();
-  videoMutationObs = new MutationObserver(muts => {
-    for (const m of muts){
-      m.addedNodes && m.addedNodes.forEach(node=>{
-        if (node.nodeType !== 1) return;
-        if (node.matches?.('video')) attachVideoARWatcher(node);
-        node.querySelectorAll?.('video').forEach(attachVideoARWatcher);
-      });
-    }
-  });
-  videoMutationObs.observe(root, { childList:true, subtree:true });
-  observeAllTileVideos();
 }
 
 /* ======================== ФУТЕР-КАРУСЕЛЬ (портрет) ======================= */
@@ -275,7 +135,6 @@ const getFootSwipe = () => qs('.foot-swipe');
 const getFootPanes = () => { const fs = getFootSwipe(); return fs ? qsa('.foot-pane', fs) : []; };
 const getSidebarPane = () => getFootSwipe()?.querySelector('.foot-pane.sidebar-pane') || null;
 const getNonSidebarPanes = () => getFootPanes().filter(p => p !== getSidebarPane());
-const getDotsWrap  = () => qs('.foot-dots');
 const getDots      = () => qsa('.foot-dots .fdot');
 const markDots = (idx)=> getDots().forEach((d,i)=> d.classList.toggle('active', i===idx));
 
@@ -497,17 +356,29 @@ export function applyLayout(){
     }
   }
 
+  // Очистим возможные следы старого grid-режима
+  const m = tilesMain();
+  if (m){
+    m.style.display = '';
+    m.style.gridTemplateColumns = '';
+    m.style.gridAutoFlow = '';
+    m.style.alignContent = '';
+    m.style.justifyContent = '';
+    m.style.gap = '';
+  }
+
   tiles.classList.remove('spotlight','single');
   document.querySelectorAll('.tile').forEach(t=>{
     t.classList.remove('spotlight','thumb');
-    t.style.width=''; t.style.height='';
+    // размеры каждой плитки задаст мозаика
+    t.style.width=''; t.style.height=''; t.style.aspectRatio='';
     if (t.parentElement !== main) main.appendChild(t);
   });
 
-  // Умная мобильная сетка (строгий AR + max площадь)
-  if (isMobileView() && !ctx.isStageFull) layoutMobileTiles();
+  // 🧩 Главный герой: мозаичная раскладка из tiles.js
+  relayoutTilesIfMobile();
 
-  // Скроллбар настроим
+  // Скроллбар (на мозаике обычно скрыт)
   updateMobileScrollbar(true);
 
   // Удержим активную панель карусели
@@ -520,13 +391,10 @@ export function applyLayout(){
 export function initLayout(){
   updateUsersCounter();
 
-  // Сразу переносим «Подключены» и настраиваем порядок панелей
+  // Перенос «Подключены» и порядок панелей
   mountSidebarIntoFootSwipe();
   ensureFootSwipeOrder(true);
   alignToActivePane('instant');
-
-  // Наблюдение за видео-AR
-  installVideoARObservers();
 
   // Скроллбар: события
   attachSbarEvents();
@@ -539,18 +407,19 @@ export function initLayout(){
 
   // Пересчёты на ресайз/ориентацию
   on(window, 'resize', ()=>{
-    if (isMobileView() && !ctx.isStageFull) layoutMobileTiles();
+    relayoutTilesIfMobile();        // ← вместо старого layoutMobileTiles()
     updateMobileScrollbar(false);
     alignToActivePane('instant');
   }, { passive:true });
+
   on(window, 'orientationchange', ()=>{
     setTimeout(()=>{
-      if (isMobileView() && !ctx.isStageFull) layoutMobileTiles();
+      relayoutTilesIfMobile();
       updateMobileScrollbar(false);
       alignToActivePane('instant');
     }, 60);
   }, { passive:true });
 
-  // Первый прогон верстки
+  // Первый прогон
   applyLayout();
 }
