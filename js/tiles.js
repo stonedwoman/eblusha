@@ -1,4 +1,5 @@
-// tiles.js — гибрид: видео-тайлы с фиксированным AR, остальные — равные; justified-раскладка на мобиле
+// tiles.js — равномерная сетка (uniform grid) c единой ячейкой для обычных,
+// но видео-тайлы растягиваются по своему AR на кратное число колонок.
 import { ctx, state } from "./state.js";
 import { byId, hashColor, isMobileView } from "./utils.js";
 import { fitSpotlightSize } from "./layout.js";
@@ -6,10 +7,10 @@ import { fitSpotlightSize } from "./layout.js";
 /* ===== DOM helpers ===== */
 export function tilesMain(){ return byId('tilesMain'); }
 export function tilesRail(){ return byId('tilesRail'); }
-export function tilesHost(){ return byId('tiles'); }          // контейнер поля
+export function tilesHost(){ return byId('tiles'); }  // поле раскладки
 export function getLocalTileVideo(){ return document.querySelector('.tile.me video'); }
 
-function isMobileHybrid(){ return isMobileView() && !ctx.isStageFull; }
+function isMobileGrid(){ return isMobileView() && !ctx.isStageFull; }
 
 /* ==== Overlay (как было) ==== */
 const ov = byId('tileOverlay');
@@ -89,7 +90,7 @@ export function createTileEl(identity, name, isLocal){
   });
 
   tilesMain().appendChild(el);
-  requestLayout(); // адаптивно переложим сразу
+  requestLayout(); // переложим сразу
   return el;
 }
 
@@ -104,29 +105,16 @@ export function createRowEl(identity, name){
 }
 
 /* ===== Видео/Аудио ===== */
-function snapVideoAR(rawAr){
-  // фиксируем видео к ближайшему из 2:1 (16:8), 16:9, 9:16 (для портретов)
-  const CANDS = [2, 16/9, 9/16];
-  if (!(rawAr > 0)) return 16/9;
-  let best = CANDS[0], d = Math.abs(rawAr - CANDS[0]);
-  for (let i=1;i<CANDS.length;i++){
-    const di = Math.abs(rawAr - CANDS[i]);
-    if (di < d){ d = di; best = CANDS[i]; }
-  }
-  return best;
-}
-
 export function setTileAspectFromVideo(tile, videoEl){
   const w = videoEl.videoWidth | 0;
   const h = videoEl.videoHeight | 0;
   if (!w || !h) return;
 
-  const ar = w/h;
   tile.classList.toggle('portrait', h > w);
-  tile.dataset.ar = ar.toFixed(6);
-  tile.dataset.vid = tile.dataset.vid || '1';   // пометка «есть видео»
+  tile.dataset.ar = (w>0 && h>0) ? (w/h).toFixed(6) : '';
+  tile.dataset.vid = '1'; // пометка «есть видео»
 
-  if (isMobileHybrid()){
+  if (isMobileGrid()){
     requestLayout();
   } else if (tile.classList.contains('spotlight')) {
     fitSpotlightSize();
@@ -238,14 +226,13 @@ export function attachAudioTrack(track, baseId){
 }
 
 /* =========================================================================
-   ГИБРИДНАЯ JUSTIFIED-РАСКЛАДКА ДЛЯ МОБИЛЬНОГО РЕЖИМА
-   — тайлы С видео: фиксированный AR (снап к 2:1, 16:9, 9:16)
-   — тайлы БЕЗ видео: у всех один AR на раскладку (из [1:1, 16:9, 9:16])
-   — укладка по строкам с одинаковой высотой, идеальное заполнение по ширине
-   — вычисления ведём относительно контейнера #tiles
+   РАВНОМЕРНАЯ СЕТКА (UNIFORM) С «SPAN BY AR» ДЛЯ ВИДЕО-ТАЙЛОВ
+   — обычные плитки: единый размер ячейки по всей сетке
+   — видео-плитки: ширина = span*cellW (+gaps), где span≈AR_video/AR_cell
+   — расчёт ведём по #tiles (fallback: #tilesMain)
    ========================================================================= */
 
-function hasWorkingVideo(tile){
+function hasVideo(tile){
   return !!tile.dataset.vid && !!tile.querySelector('video');
 }
 
@@ -257,161 +244,163 @@ function getVideoAR(tile){
   return (w>0 && h>0) ? (w/h) : NaN;
 }
 
-// для поля #tiles
-function getAvailableFieldSize(){
+function getTileAR(tile){
+  const d = parseFloat(tile.dataset.ar);
+  if (d && isFinite(d) && d > 0) return d;
+  const v = tile.querySelector('video');
+  const w = v?.videoWidth|0, h = v?.videoHeight|0;
+  if (w>0 && h>0) return w/h;
+  return tile.classList.contains('portrait') ? (9/16) : (16/9);
+}
+
+// AR «ячейки» выбираем ТОЛЬКО по обычным (без видео) плиткам.
+// Если их нет — берём 1:1 как нейтральный.
+function pickCellAR(tiles){
+  const ph = tiles.filter(t=>!hasVideo(t));
+  if (!ph.length) return 1; // все видео — делаем квадратную базу
+  const ars = ph.map(getTileAR);
+  const portraits = ars.filter(a=>a<1).length;
+  const majority = portraits > ph.length/2 ? (9/16) : (16/9);
+  // попробуем также квадрат как запасной
+  // вернём тот, который ближе к среднему по «фантомным» AR плейсхолдеров
+  const avg = ars.reduce((s,a)=>s+a,0)/ars.length;
+  const cand = [majority, 1];
+  let best=cand[0], d=Math.abs(avg-best);
+  if (Math.abs(avg-cand[1])<d) best=cand[1];
+  return best;
+}
+
+// измеряем поле по #tiles (или #tilesMain)
+function getFieldSize(){
   const host = tilesHost() || tilesMain() || document.body;
   const cs = getComputedStyle(host);
   const padH = (parseFloat(cs.paddingLeft)||0) + (parseFloat(cs.paddingRight)||0);
   const padV = (parseFloat(cs.paddingTop)||0)  + (parseFloat(cs.paddingBottom)||0);
-
   const W = Math.max(0, (host.clientWidth || host.getBoundingClientRect().width) - padH);
   const H = Math.max(0, (host.clientHeight|| host.getBoundingClientRect().height) - padV);
   return { W, H };
 }
 
-function pickPlaceholderAR(tiles){
-  // выбираем из [1:1, 16:9, 9:16] то, что даст лучший fill
-  const CANDS = [1, 16/9, 9/16];
-  const { W, H } = getAvailableFieldSize();
-  const gap = parseFloat(getComputedStyle(tilesMain()).getPropertyValue('--tile-gap')) || 10;
-
-  let best = CANDS[0], bestScore = -Infinity;
-
-  for (const ar of CANDS){
-    // грубая оценка: попробуем 1 или 2 строки, какая заполнит лучше
-    for (let rows=1; rows<=2; rows++){
-      const cols = Math.max(1, Math.floor((W + gap) / ((H/rows)*ar + gap)));
-      const cw = (W - gap*(cols-1)) / cols;
-      const ch = cw / ar;
-      const filledH = ch*rows + gap*(rows-1);
-      const util = Math.min(1, (filledH/H));
-      const score = util - Math.abs(filledH - H)*0.0001; // лёгкая нелюбовь к недозаполнению/переполнению
-      if (score > bestScore){ bestScore = score; best = ar; }
-    }
-  }
-  return best;
-}
-
 let layoutRAF = 0;
 function requestLayout(){
-  if (!isMobileHybrid()) return;
+  if (!isMobileGrid()) return;
   if (layoutRAF) return;
-  layoutRAF = requestAnimationFrame(()=>{ layoutRAF = 0; layoutHybridRows(); });
+  layoutRAF = requestAnimationFrame(()=>{ layoutRAF = 0; layoutUniformGrid(); });
 }
 
-function layoutHybridRows(){
+function layoutUniformGrid(){
   const m = tilesMain();
   if (!m) return;
 
   const tiles = Array.from(m.querySelectorAll('.tile'));
   const N = tiles.length;
-  if (!N){ clearLayout(); return; }
+  if (!N){ clearGrid(); return; }
 
-  const hostSize = getAvailableFieldSize();
-  const W = hostSize.W, H = hostSize.H;
+  const { W, H } = getFieldSize();
   if (W < 10 || H < 10){ requestLayout(); return; }
 
-  // соберём элементы с AR
-  const videoItems = [];
-  const phItems    = [];
-  tiles.forEach(t=>{
-    if (hasWorkingVideo(t)){
-      const raw = getVideoAR(t);
-      const ar = snapVideoAR(raw);
-      videoItems.push({ el:t, ar });
-    } else {
-      phItems.push({ el:t, ar: NaN }); // заполним позже
-    }
-  });
+  // гарантируем ширину
+  m.style.width = '100%';
 
-  // единый AR для плейсхолдеров
-  const phAR = pickPlaceholderAR(tiles);
-  phItems.forEach(i=> i.ar = phAR);
-
-  const items = videoItems.concat(phItems); // исходный порядок важен (справедливый)
-
-  // justified по строкам
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
-  const totalAR = items.reduce((s,x)=>s+x.ar, 0);
 
+  const cellAR = pickCellAR(tiles);
+
+  // подберём число колонок (1..N): при размещении элементами-«юнитами»
+  // (обычная плитка = 1 юнит, видео = round(AR_video/cellAR) юнитов)
   let best = null;
 
-  function measure(rowsCount){
-    const target = totalAR / rowsCount;
+  function packAndMeasure(cols){
+    const cw = (W - gap*(cols-1)) / cols;
+    if (cw <= 0) return null;
+    const ch = cw / cellAR;
+
+    // превратим список тайлов в юниты
+    const items = tiles.map(el=>{
+      if (hasVideo(el)){
+        let ar = getVideoAR(el);
+        if (!(ar>0 && isFinite(ar))) ar = cellAR; // на всякий
+        let span = Math.max(1, Math.round(ar / cellAR));
+        span = Math.min(span, cols); // не больше строки
+        return { el, type:'vid', span, ar };
+      } else {
+        return { el, type:'ph', span:1, ar:cellAR };
+      }
+    });
+
+    // грид по строкам
     const rows = [];
-    let row = [], sum = 0;
-
-    for (let i=0;i<items.length;i++){
-      const it = items[i];
-      if (row.length===0){ row.push(it); sum = it.ar; continue; }
-      const remain    = items.length - i;
-      const rowsLeft  = rowsCount - rows.length;
-      const mustKeep  = remain <= (rowsLeft-1);
-      const closer    = Math.abs(sum + it.ar - target) <= Math.abs(sum - target);
-
-      if (!mustKeep && closer){ row.push(it); sum += it.ar; }
-      else { rows.push(row); row = [it]; sum = it.ar; }
+    let row = [], used = 0;
+    for (const it of items){
+      if (used + it.span > cols){
+        if (row.length) rows.push(row);
+        row = [it]; used = it.span;
+      } else {
+        row.push(it); used += it.span;
+      }
     }
     if (row.length) rows.push(row);
 
-    const heights = rows.map(r=>{
-      const sumAR = r.reduce((s,x)=>s+x.ar,0);
-      const n = r.length;
-      const wAvail = W - gap*(n-1);
-      const h = wAvail / sumAR;
-      return Math.max(40, h);
-    });
+    const totalH = rows.length * ch + gap*(rows.length-1);
 
-    const totalH = heights.reduce((s,h)=>s+h,0) + gap*(rows.length-1);
-    return { rows, heights, totalH };
+    // метрика: 1) не превышать высоту, 2) ближе к H, 3) меньше «пустых» ячеек
+    const fits = totalH <= H;
+    let blanks = 0;
+    for (const r of rows){
+      const sum = r.reduce((s,x)=>s+x.span,0);
+      blanks += Math.max(0, cols - sum);
+    }
+    const score = (fits?0:10000) + Math.abs(H-totalH) + blanks*5;
+
+    return { cols, cw, ch, rows, totalH, blanks, score };
   }
 
-  for (let r = 1; r <= Math.min(N, 6); r++){ // до 6 строк на мобиле — более чем
-    const cand = measure(r);
-    const fits = cand.totalH <= H;
-    const score = fits ? (H - cand.totalH) : (cand.totalH - H + 10000);
-    if (!best || score < best.score) best = { ...cand, rowsCount:r, score };
+  for (let cols=1; cols<=N; cols++){
+    const cand = packAndMeasure(cols);
+    if (!cand) continue;
+    if (!best || cand.score < best.score) best = cand;
   }
+  if (!best){ clearGrid(); return; }
 
-  if (!best){ clearLayout(); return; }
-
-  // Применяем
+  // раскладываем
   m.style.position = 'relative';
-  m.style.width = '100%';
+  m.classList.add('grid-active');
+
   const px = (v)=> Math.round(v) + 'px';
+  const { cols, cw, ch, rows } = best;
 
   let y = 0;
-  best.rows.forEach((row, ri)=>{
-    const h = best.heights[ri];
+  for (const r of rows){
     let x = 0;
-    row.forEach((it)=>{
-      const w = it.ar * h;
+    for (const it of r){
       const el = it.el;
+      const w = it.span * cw + gap * (it.span - 1);
 
       el.style.boxSizing = 'border-box';
-      el.style.position  = 'absolute';
+      el.style.position = 'absolute';
       el.style.left = px(x);
       el.style.top  = px(y);
 
-      // ⬇️ перебиваем .tile.me { width:100%!important }
+      // перебиваем возможные !important
       el.style.setProperty('width',  px(w), 'important');
-      el.style.setProperty('height', px(h), 'important');
+      el.style.setProperty('height', px(ch), 'important');
 
-      el.style.aspectRatio = ''; // фиксируемся на width/height
+      el.style.aspectRatio = ''; // держим размер по width/height
       x += w + gap;
-    });
-    y += h + gap;
-  });
+    }
+    y += ch + gap;
+  }
 
   m.style.height = px(y - gap);
   tiles.forEach(t=> t.classList.remove('spotlight','thumb'));
 }
 
-function clearLayout(){
+function clearGrid(){
   const m = tilesMain(); if (!m) return;
+  m.classList.remove('grid-active');
   m.style.position = '';
-  m.style.width    = '';
   m.style.height   = '';
+  m.style.width    = '';
   m.querySelectorAll('.tile').forEach(t=>{
     t.style.removeProperty('position');
     t.style.removeProperty('top');
@@ -424,8 +413,8 @@ function clearLayout(){
 }
 
 /* --- реагируем на изменения окружения --- */
-window.addEventListener('resize', ()=>{ if (isMobileHybrid()) requestLayout(); }, { passive:true });
-window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ if (isMobileHybrid()) requestLayout(); }, 60); }, { passive:true });
+window.addEventListener('resize', ()=>{ if (isMobileGrid()) requestLayout(); }, { passive:true });
+window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ if (isMobileGrid()) requestLayout(); }, 60); }, { passive:true });
 
 /* ResizeObserver — следим и за .tiles-main, и за #tiles */
 let roMain = null;
@@ -438,20 +427,20 @@ function attachROs(){
   if (roHost){ roHost.disconnect(); roHost = null; }
 
   if (m){
-    roMain = new ResizeObserver(()=>{ if (isMobileHybrid()) requestLayout(); });
+    roMain = new ResizeObserver(()=>{ if (isMobileGrid()) requestLayout(); });
     roMain.observe(m);
   }
   if (h){
-    roHost = new ResizeObserver(()=>{ if (isMobileHybrid()) requestLayout(); });
+    roHost = new ResizeObserver(()=>{ if (isMobileGrid()) requestLayout(); });
     roHost.observe(h);
   }
 }
 attachROs();
 document.addEventListener('DOMContentLoaded', attachROs);
 
-/* Перестраиваем при изменениях DOM/атрибутов (горячее подключение и т.п.) */
+/* Перестраиваем при изменениях DOM/атрибутов (горячее подключение, смена AR) */
 const tilesMutObs = new MutationObserver((muts)=>{
-  if (!isMobileHybrid()) return;
+  if (!isMobileGrid()) return;
   for (const m of muts){
     if (m.type === 'childList' && (m.addedNodes.length || m.removedNodes.length)){ requestLayout(); return; }
     if (m.type === 'attributes'){ requestLayout(); return; } // data-ar / class / data-vid
@@ -467,5 +456,5 @@ tm && tilesMutObs.observe(tm, {
 
 /* Экспорт — на случай ручного пересчёта извне */
 export function relayoutTilesIfMobile(){
-  if (isMobileHybrid()) layoutHybridRows(); else clearLayout();
+  if (isMobileGrid()) layoutUniformGrid(); else clearGrid();
 }
