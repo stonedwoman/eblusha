@@ -105,7 +105,6 @@ function getVideoAR(tile){
 function getTileAR(tile){
   const d = parseFloat(tile.dataset.ar);
   if (d && isFinite(d) && d > 0) return d;
-function getTileAR(tile){
   return tile.classList.contains('portrait') ? (9/16) : (16/9);
 }
 
@@ -206,7 +205,6 @@ function layoutUniformGrid(){
     let blanks = 0;
     for (const r of rows){ blanks += Math.max(0, W - r.rowW); }
     const score = (fits?0:10000) + Math.abs(H-totalH) + blanks*0.01;
-
     return { cols, cellW, rowH, rows, totalH, score };
     const filledW = cw * cols + gap * (cols - 1);
     const filledH = ch * rows + gap * (rows - 1);
@@ -256,7 +254,6 @@ function layoutUniformGrid(){
     });
     y += rowH + gap;
   }
-  const { cols, rows, cw, ch } = best;
 
   tiles.forEach((el, i)=>{
     const r = Math.floor(i / cols);
@@ -277,15 +274,12 @@ function layoutUniformGrid(){
   m.style.height = px(rows * ch + gap * (rows - 1));
   tiles.forEach(t=> t.classList.remove('spotlight','thumb'));
 }
-
-function attachROs(){
 attachROs();
 document.addEventListener('DOMContentLoaded', attachROs);
 
 /* Перестраиваем при изменениях DOM/атрибутов (горячее подключение, смена AR) */
 /* Перестраиваем при изменениях DOM/атрибутов (горячие подключения, смена AR) */
 const tilesMutObs = new MutationObserver((muts)=>{
-  if (!isMobileGrid()) return;
   for (const m of muts){
 tm && tilesMutObs.observe(tm, {
 export function relayoutTilesIfMobile(){
