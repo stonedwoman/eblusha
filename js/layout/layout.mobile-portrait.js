@@ -5,14 +5,23 @@ import { createTileEl, tilesMain, relayoutTilesIfMobile } from "../tiles.js";
 import { usersCounterText } from "../registry.js";
 
 /* ----------------------------- Утилиты ----------------------------------- */
-const on = (el, ev, fn, opts) => el && el.addEventListener(ev, fn, opts);
-const qs = (sel, root=document) => root.querySelector(sel);
+const on  = (el, ev, fn, opts) => el && el.addEventListener(ev, fn, opts);
+const qs  = (sel, root=document) => root.querySelector(sel);
 const qsa = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
 /* ------------------------ Пользовательский счётчик ----------------------- */
 export function updateUsersCounter(){
   const tag = byId('usersTag');
   if (tag) tag.textContent = usersCounterText();
+}
+
+/* ------------------------- Подсветка говорящих --------------------------- */
+export function highlightSpeaking(ids){
+  const set = new Set(ids);
+  document.querySelectorAll('.tile').forEach(t=>t.classList.remove('speaking'));
+  set.forEach(id=>{
+    document.querySelector(`.tile[data-pid="${CSS.escape(id)}"]`)?.classList.add('speaking');
+  });
 }
 
 /* ===================== МОБИЛЬНЫЙ СКРОЛЛБАР ДЛЯ ПЛИТОК ==================== */
@@ -95,18 +104,22 @@ function attachSbarEvents(){
   if (!(sbar && track && thumb) || sbar.__sbarBound) return;
   sbar.__sbarBound = true;
 
+  // Pointer
   thumb.addEventListener('pointerdown', (e)=>{ e.preventDefault(); thumb.setPointerCapture?.(e.pointerId); startSbarDrag(e.clientX); });
   document.addEventListener('pointermove', (e)=>{ if(sbarDrag) moveSbarDrag(e.clientX); }, {passive:true});
   document.addEventListener('pointerup', endSbarDrag);
 
+  // Mouse
   thumb.addEventListener('mousedown', (e)=>{ e.preventDefault(); startSbarDrag(e.clientX); });
   document.addEventListener('mousemove', (e)=>{ if(sbarDrag) moveSbarDrag(e.clientX); });
   document.addEventListener('mouseup', endSbarDrag);
 
+  // Touch
   thumb.addEventListener('touchstart', (e)=>{ startSbarDrag(e.touches[0].clientX); }, {passive:true});
   document.addEventListener('touchmove',  (e)=>{ if(sbarDrag) moveSbarDrag(e.touches[0].clientX); }, {passive:true});
   document.addEventListener('touchend', endSbarDrag);
 
+  // Click-to-jump
   track.addEventListener('mousedown', (e)=>{
     if(e.target===thumb) return;
     const rect = track.getBoundingClientRect();
@@ -290,7 +303,7 @@ function mountSidebarIntoFootSwipe(){
     const dots = getDots();
     if (dots.length){
       dots.forEach((dot, i)=>{
-        on(dot, 'click', ()=> scrollFootSwipeToPane(i, 'smooth'));
+        on(dot, 'click',   ()=> scrollFootSwipeToPane(i, 'smooth'));
         on(dot, 'keydown', (e)=>{ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scrollFootSwipeToPane(i, 'smooth'); }});
       });
       markDots(activePaneIdx);
@@ -356,7 +369,7 @@ export function applyLayout(){
     }
   }
 
-  // Очистим возможные следы старого grid-режима
+  // Снимаем возможный grid от старых режимов
   const m = tilesMain();
   if (m){
     m.style.display = '';
@@ -370,15 +383,14 @@ export function applyLayout(){
   tiles.classList.remove('spotlight','single');
   document.querySelectorAll('.tile').forEach(t=>{
     t.classList.remove('spotlight','thumb');
-    // размеры каждой плитки задаст мозаика
     t.style.width=''; t.style.height=''; t.style.aspectRatio='';
     if (t.parentElement !== main) main.appendChild(t);
   });
 
-  // 🧩 Главный герой: мозаичная раскладка из tiles.js
+  // 🧩 Мозаичная раскладка из tiles.js
   relayoutTilesIfMobile();
 
-  // Скроллбар (на мозаике обычно скрыт)
+  // Скроллбар (в мозаике обычно скрыт)
   updateMobileScrollbar(true);
 
   // Удержим активную панель карусели
@@ -396,7 +408,7 @@ export function initLayout(){
   ensureFootSwipeOrder(true);
   alignToActivePane('instant');
 
-  // Скроллбар: события
+  // События скроллбара
   attachSbarEvents();
   const tm = tilesMain();
   if (tm){
@@ -405,9 +417,12 @@ export function initLayout(){
     ro.observe(tm);
   }
 
+  // Слушаем события из tiles.js (без циклов)
+  window.addEventListener('layout:sbar-update', ()=> updateMobileScrollbar(false));
+
   // Пересчёты на ресайз/ориентацию
   on(window, 'resize', ()=>{
-    relayoutTilesIfMobile();        // ← вместо старого layoutMobileTiles()
+    relayoutTilesIfMobile();
     updateMobileScrollbar(false);
     alignToActivePane('instant');
   }, { passive:true });

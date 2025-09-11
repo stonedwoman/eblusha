@@ -11,7 +11,7 @@ html, body{
 
 #screen-app{
   grid-template-columns:1fr;
-  grid-template-rows:auto minmax(0,1fr) auto; /* без минималки, чтобы не выдавливать футер */
+  grid-template-rows:auto minmax(0,1fr) auto;
   grid-template-areas:
     "sidebar"
     "stage"
@@ -47,50 +47,51 @@ html, body{
 
 .tile .name{top:10px; bottom:unset}
 
-/* Tiles: SMART GRID вместо горизонтальной ленты */
+/* === Tiles-контейнеры =================================================== */
+
+/* Корневой контейнер плиток — обычный блок (раньше была «лента») */
 .tiles{
-  display:grid !important;
-  grid-template-columns:1fr !important;
-  grid-template-rows:1fr !important;
+  display:block !important;           /* не grid и не flex — не мешаем абсолютам детей */
 }
 
+/* Рабочая область плиток. Её позиционирует мозаика (JS). */
 .tiles-main{
-  display:grid;                       /* вместо flex-ленты */
-  gap:var(--tile-gap);
-  justify-content:center;             /* центрируем по ширине */
-  align-content:center;               /* центрируем по высоте */
-  overflow:hidden;                    /* отключаем горизонтальный скролл */
-  -webkit-overflow-scrolling:auto;    /* сброс */
+  position:relative;                   /* база для absolute-детей */
+  min-height:0;
+  overflow:hidden;                     /* горизонталь нам не нужна в мозаике */
+  -webkit-overflow-scrolling:auto;
   overscroll-behavior:contain;
-  touch-action:auto;                  /* жесты как обычно */
-  scroll-snap-type:none;              /* сброс ленты */
-  scroll-padding-inline:0;            /* сброс ленты */
+  touch-action:auto;
+  /* ВАЖНО: никаких display:grid/flex — иначе могут быть побочки.
+     Если где-то остался старый стиль, перекрываем: */
+  display:block;
+  gap:0;                               /* gap grid-а не нужен абсолютам */
 }
 
-/* Размер тайла теперь задаёт JS через inline aspect-ratio (16/9 или 9/16) */
+/* Фолбэк для тайла до прихода JS (чтобы не было белого экрана).
+   После расчёта мозаика задаёт width/height/left/top инлайнами. */
 .tile{
   min-height:0;
   flex:none;
   width:100%;
-  height:auto;                        /* aspect-ratio приходит из JS */
-  aspect-ratio:16/9;                  /* безопасный fallback до JS */
-  scroll-snap-align:unset;            /* сброс ленты */
+  height:auto;
+  aspect-ratio:16 / 9;                 /* временно; JS снимет и проставит размеры */
+  scroll-snap-align:unset;
 }
 .tile .controls{display:none !important}
 .tile video{width:100%; height:100%; object-fit:cover; object-position:center}
 
-/* Кастомный скроллбар плиток — скрыт в портретной сетке */
+/* Кастомный скроллбар плиток — в портретной мозаике скрыт */
 .tiles-sbar{ display:none !important }
 
-/* ===== Footer as swipe carousel (портрет: 3 панели как в ландшафте) ===== */
+/* ===== Footer as swipe carousel (портрет: 3 панели) ====================== */
 .footer{
   grid-area:footer;
   display:block;
   padding-bottom:env(safe-area-inset-bottom);
-  min-width:0;                        /* чтобы грид-айтем не растягивал контейнер */
+  min-width:0;
 }
 
-/* Контейнер карусели: ширина = 100%, safe-area учитываем padding-ами */
 .foot-swipe{
   display:flex;
   width:100%;
@@ -110,11 +111,10 @@ html, body{
 }
 .foot-swipe::-webkit-scrollbar{display:none}
 
-/* Каждая панель — ровно шириной контейнера */
 .foot-pane{
   flex:0 0 100%;
   width:auto;
-  min-width:0;                        /* не шириться сверх контейнера */
+  min-width:0;
   height:100%;
   box-sizing:border-box;
   padding:12px 12px 0 12px;
@@ -126,12 +126,11 @@ html, body{
   overscroll-behavior-y:none;
 }
 
-/* Опционально: порядок (на случай, если DOM не переставлен JS-ом) */
+/* Опционально: порядок, если DOM не переставлен JS-ом */
 .foot-pane.pane-connected{ order:1; }
 .foot-pane.pane-settings { order:2; }
 .foot-pane.pane-chat     { order:3; }
 
-/* Мелочи */
 .foot-pane:last-child{border-right:none}
 .footer-left{padding:0; border-right:none}
 .footer-right{padding:0}

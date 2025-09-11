@@ -1,15 +1,19 @@
 // tiles.js — мозаичная (justified) раскладка с пер-тайловым AR на мобиле
 import { ctx, state } from "./state.js";
 import { byId, hashColor, isMobileView } from "./utils.js";
-import { fitSpotlightSize, queueSbarUpdate } from "./layout.js";
+
+/* ===== мини-эмиттер для связи с layout-модулями (без циклов) ===== */
+const emit = (name, detail) => window.dispatchEvent(new CustomEvent(name, { detail }));
+const requestSbarUpdate   = () => emit("layout:sbar-update");
+const requestFitSpotlight = () => emit("layout:fit-spotlight");
 
 /* ===== DOM helpers ===== */
 export function tilesMain(){ return byId('tilesMain'); }
 export function tilesRail(){ return byId('tilesRail'); }
 export function getLocalTileVideo(){ return document.querySelector('.tile.me video'); }
 
-function isMobileMosaic(){ return isMobileView() && !ctx.isStageFull; };
-
+/* важное: функция-декларация (нет TDZ) */
+function isMobileMosaic(){ return isMobileView() && !ctx.isStageFull; }
 
 /* ==== Overlay (как было) ==== */
 const ov = byId('tileOverlay');
@@ -117,10 +121,12 @@ export function setTileAspectFromVideo(tile, videoEl){
 
   if (isMobileMosaic()){
     layoutMosaic();         // перестроить «мозаику» на мобиле
-    queueSbarUpdate();      // горизонтального скролла нет — но пускай обновится
+    requestSbarUpdate();    // горизонтального скролла нет — но обновим статус
   } else if (tile.classList.contains('spotlight')) {
-    fitSpotlightSize();     // десктоп
+    requestFitSpotlight();  // десктоп попросим подогнать спотлайт
   }
+
+  emit('tiles:ar-changed', { tile });
 }
 
 export function applyCamTransformsTo(el){
@@ -182,7 +188,7 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
   tryApply();
 
   if (isMobileMosaic()) layoutMosaic();
-  queueSbarUpdate();
+  requestSbarUpdate();
 }
 
 export function ensureTile(identity, name, isLocal){
@@ -208,9 +214,9 @@ export function showAvatarInTile(identity){
     ph.innerHTML=`<div class="avatar-ph">${(t.dataset.name||'?').slice(0,1).toUpperCase()}</div>`;
     t.prepend(ph);
   }
-  if (t.classList.contains('spotlight')) fitSpotlightSize();
+  if (t.classList.contains('spotlight')) requestFitSpotlight();
   if (isMobileMosaic()) layoutMosaic();
-  queueSbarUpdate();
+  requestSbarUpdate();
 }
 
 export function attachAudioTrack(track, baseId){
@@ -271,8 +277,7 @@ function layoutMosaic(){
   // Подготовим данные по AR
   const items = tiles.map(t => ({ el:t, ar: Math.max(0.2, Math.min(5, getTileAR(t))) }));
 
-  // --- Поиск лучшего числа строк (1..N) так, чтобы суммарная высота
-  // максимально заполняла H (предпочтительно не превышая H).
+  // --- Поиск лучшего числа строк (1..N)
   const totalAR = items.reduce((s,x)=>s+x.ar, 0);
   let best = null;
 
@@ -287,14 +292,12 @@ function layoutMosaic(){
       const it = items[i];
       if (row.length===0){ row.push(it); sum = it.ar; continue; }
 
-      // если добавление текущего приближает к target — добавляем,
-      // иначе — переносим в новый ряд (но следим, чтобы элементов хватило на оставшиеся ряды)
-      const remain = items.length - i;           // ещё столько элементов осталось
+      const remain = items.length - i;           // сколько элементов осталось
       const rowsLeft = rowsCount - rows.length;  // включая текущий
-      const mustKeep = remain <= (rowsLeft-1);   // если мало — надо переносить
+      const mustBreak = remain <= (rowsLeft-1);  // если мало — переносим
       const closer = Math.abs(sum + it.ar - target) <= Math.abs(sum - target);
 
-      if (!mustKeep && closer){
+      if (!mustBreak && closer){
         row.push(it); sum += it.ar;
       } else {
         rows.push(row);
@@ -316,10 +319,18 @@ function layoutMosaic(){
     return { rows, heights, totalH };
   }
 
+  // предпочитаем количество рядов около ceil(sqrt(N));
+  // один ряд при N>=2 — штрафуем, чтобы 2 участника стали в 2 ряда
+  const prefRows = Math.min(N, Math.max(1, Math.ceil(Math.sqrt(N))));
   for (let r = 1; r <= N; r++){
     const cand = measure(r);
     const fits = cand.totalH <= H;
-    const score = fits ? (H - cand.totalH) : (cand.totalH - H + 10000); // штраф за переполнение
+
+    const base   = fits ? (H - cand.totalH) : (cand.totalH - H + 10000); // штраф за переполнение
+    const prefer = Math.abs(r - prefRows) * 200;                          // мягкая тяга к «разумным» рядам
+    const singlePenalty = (N >= 2 && r === 1) ? 1000 : 0;                 // не хотим один ряд при 2+
+
+    const score = base + prefer + singlePenalty;
     if (!best || score < best.score) best = { ...cand, rowsCount:r, score };
   }
 
@@ -327,7 +338,6 @@ function layoutMosaic(){
 
   // Абсолютное позиционирование
   m.style.position = 'relative';
-  m.style.display  = m.style.display; // (не трогаем display:grid — abs-дети не участвуют в гриде)
   let y = 0;
 
   // Применяем размеры/позиции
@@ -336,7 +346,7 @@ function layoutMosaic(){
   best.rows.forEach((row, ri) => {
     const h = best.heights[ri];
     let x = 0;
-    row.forEach((it, i) => {
+    row.forEach((it) => {
       const w = it.ar * h;
       const el = it.el;
 
@@ -355,13 +365,13 @@ function layoutMosaic(){
   // высота контейнера
   m.style.height = px(y - gap); // убрали последний gap
 
-  // все «лишние» инлайны, выставленные другими режимами, убираем
+  // все «лишние» инлайны/классы, которые мешают мозаике
   tiles.forEach(t=>{
     t.classList.remove('spotlight','thumb');
   });
 
-  // горизонтального скролла нет — спрячем кастомный сбар, если используется
-  queueSbarUpdate();
+  // горизонтального скролла нет — спрячем/обновим кастомный сбар (через событие)
+  requestSbarUpdate();
 }
 
 /* --- сброс мозаики (когда выходим из мобилки) --- */
@@ -376,7 +386,7 @@ function clearMosaic(){
     t.style.left = '';
     t.style.width = '';
     t.style.height = '';
-    t.style.aspectRatio = ''; // остальное снимет модуль десктопа/старых сеток
+    t.style.aspectRatio = ''; // остальное снимет активный layout
   });
 }
 
@@ -391,17 +401,16 @@ window.addEventListener('orientationchange', ()=>{
   }, 60);
 }, { passive:true });
 
-/* Небольшой наблюдатель за DOM плиток — чтобы мозаика перестраивалась,
+/* Наблюдатель за DOM плиток — чтобы мозаика перестраивалась,
    когда плитки добавляются/удаляются не через наши функции */
 const tilesMutObs = new MutationObserver((muts)=>{
   if (!isMobileMosaic()) return;
-  let need = false;
   for (const m of muts){
     if (m.type === 'childList' && (m.addedNodes.length || m.removedNodes.length)){
-      need = true; break;
+      layoutMosaic();
+      return;
     }
   }
-  if (need) layoutMosaic();
 });
 const tm = tilesMain();
 tm && tilesMutObs.observe(tm, { childList:true });
