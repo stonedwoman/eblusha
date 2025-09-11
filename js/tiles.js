@@ -1,7 +1,8 @@
 // tiles.js — uniform mobile grid: одинаковые боксы; видео внутри со своим AR
 import { ctx, state } from "./state.js";
 import { byId, hashColor, isMobileView } from "./utils.js";
-import { fitSpotlightSize } from "./layout.js";
+// ⬇️ вместо именованного импорта — неймспейс и опциональный вызов
+import * as layout from "./layout.js";
 
 /* ===== DOM helpers ===== */
 export function tilesMain(){ return byId('tilesMain'); }
@@ -154,16 +155,17 @@ export function setTileAspectFromVideo(tile, videoEl){
   tile.dataset.ar  = (w>0 && h>0) ? (w/h).toFixed(6) : '';
   tile.dataset.vid = '1'; // метка «есть видео»
 
-  // ВАЖНО: видео всегда рисуем своим AR внутри фиксированного бокса
+  // видео рисуем своим AR внутри фиксированного бокса
   videoEl.style.width = '100%';
   videoEl.style.height = '100%';
-  videoEl.style.objectFit = 'contain';   // чтобы портрет не «резался» по бокам
+  videoEl.style.objectFit = 'contain';
   videoEl.style.objectPosition = 'center';
 
   if (isMobileGrid()){
     requestLayout();
   } else if (tile.classList.contains('spotlight')) {
-    fitSpotlightSize();
+    // опциональный вызов: если функции нет — просто ничего не делаем
+    layout?.fitSpotlightSize?.();
   }
 }
 
@@ -260,7 +262,7 @@ export function showAvatarInTile(identity){
     ph.innerHTML=`<div class="avatar-ph">${(t.dataset.name||'?').slice(0,1).toUpperCase()}</div>`;
     t.prepend(ph);
   }
-  if (t.classList.contains('spotlight')) fitSpotlightSize();
+  if (t.classList.contains('spotlight')) layout?.fitSpotlightSize?.();
   requestLayout();
 }
 
