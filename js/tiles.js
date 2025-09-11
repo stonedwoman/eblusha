@@ -6,6 +6,7 @@ import { fitSpotlightSize } from "./layout.js";
 /* ===== DOM helpers ===== */
 export function tilesMain(){ return byId('tilesMain'); }
 export function tilesRail(){ return byId('tilesRail'); }
+export function tilesHost(){ return byId('tiles'); }            // ⬅️ поле раскладки
 export function getLocalTileVideo(){ return document.querySelector('.tile.me video'); }
 
 function isMobileGrid(){ return isMobileView() && !ctx.isStageFull; }
@@ -227,7 +228,7 @@ export function attachAudioTrack(track, baseId){
    РАВНОМЕРНАЯ СЕТКА ДЛЯ МОБИЛЬНОГО РЕЖИМА
    — все плитки одного размера (общая ширина/высота ячейки)
    — подбираем кол-во колонок (1..N) и единый aspect-ratio ячейки
-   — целевая функция: максимальная суммарная площадь, при полном влезании в stage
+   — целевая функция: максимальная суммарная площадь, при полном влезании в поле (#tiles)
    ========================================================================= */
 
 function getTileAR(tile){
@@ -241,12 +242,15 @@ function getTileAR(tile){
   return tile.classList.contains('portrait') ? (9/16) : (16/9);
 }
 
-function getAvailableStageSize(m){
-  const stage = m.closest?.('.stage') || m.parentElement || document.body;
-  const cs = getComputedStyle(stage);
-  const padV = (parseFloat(cs.paddingTop)||0) + (parseFloat(cs.paddingBottom)||0);
-  const H = Math.max(0, stage.clientHeight - padV);
-  const W = Math.max(0, m.clientWidth);
+// Измеряем ДЛЯ ПОЛЯ #tiles (а не .stage)
+function getAvailableFieldSize(){
+  const host = tilesHost() || tilesMain() || document.body;
+  const cs = getComputedStyle(host);
+  const padH = (parseFloat(cs.paddingLeft)||0) + (parseFloat(cs.paddingRight)||0);
+  const padV = (parseFloat(cs.paddingTop)||0)  + (parseFloat(cs.paddingBottom)||0);
+
+  const W = Math.max(0, (host.clientWidth || host.getBoundingClientRect().width) - padH);
+  const H = Math.max(0, (host.clientHeight|| host.getBoundingClientRect().height) - padV);
   return { W, H };
 }
 
@@ -265,8 +269,12 @@ function layoutUniformGrid(){
   const N = tiles.length;
   if (!N){ clearGrid(); return; }
 
-  const { W, H } = getAvailableStageSize(m);
+  // ширину/высоту берём у #tiles
+  const { W, H } = getAvailableFieldSize();
   if (W < 10 || H < 10){ requestLayout(); return; }
+
+  // гарантируем, что .tiles-main занимает ширину поля
+  m.style.width = '100%';
 
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
 
@@ -276,7 +284,7 @@ function layoutUniformGrid(){
   const majorityAR = portraits > N/2 ? 9/16 : 16/9;
 
   // Рассматриваем кандидаты AR ячейки
-  const arCandidates = [majorityAR, 1]; // 1:1 как запасной вариант
+  const arCandidates = [majorityAR, 1]; // 1:1 как запасной резерв
 
   let best = null;
 
@@ -293,7 +301,7 @@ function layoutUniformGrid(){
 
     let cw, ch;
     if (chByW <= cellHAvail && cwByH <= cellWAvail) {
-      // оба варианта влазят — берём тот, что даёт большую площадь
+      // оба влазят — берём тот, что даёт большую площадь
       const areaW = cellWAvail * chByW;
       const areaH = cwByH * cellHAvail;
       if (areaW >= areaH){ cw = cellWAvail; ch = chByW; } else { ch = cellHAvail; cw = cwByH; }
@@ -346,8 +354,11 @@ function layoutUniformGrid(){
     el.style.position = 'absolute';
     el.style.left = px(left);
     el.style.top  = px(top);
-    el.style.width  = px(cw);
-    el.style.height = px(ch);
+
+    // ⬇️ побеждаем возможные CSS `!important` (например .tile.me { width:100%!important })
+    el.style.setProperty('width',  px(cw), 'important');
+    el.style.setProperty('height', px(ch), 'important');
+
     el.style.aspectRatio = ''; // фиксируемся на width/height
   });
 
@@ -361,14 +372,15 @@ function clearGrid(){
   m.classList.remove('grid-active');
   m.style.position = '';
   m.style.height   = '';
+  m.style.width    = '';
   m.querySelectorAll('.tile').forEach(t=>{
-    t.style.position = '';
-    t.style.top = '';
-    t.style.left = '';
-    t.style.width = '';
-    t.style.height = '';
+    t.style.removeProperty('position');
+    t.style.removeProperty('top');
+    t.style.removeProperty('left');
+    t.style.removeProperty('width');
+    t.style.removeProperty('height');
+    t.style.removeProperty('box-sizing');
     t.style.aspectRatio = '';
-    t.style.boxSizing = '';
   });
 }
 
@@ -376,15 +388,27 @@ function clearGrid(){
 window.addEventListener('resize', ()=>{ if (isMobileGrid()) requestLayout(); }, { passive:true });
 window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ if (isMobileGrid()) requestLayout(); }, 60); }, { passive:true });
 
-/* ResizeObserver — если контейнер меняет размер */
-let ro = null;
-(function attachRO(){
+/* ResizeObserver — следим и за .tiles-main, и за #tiles */
+let roMain = null;
+let roHost = null;
+function attachROs(){
   const m = tilesMain();
-  if (!m) return;
-  if (ro) ro.disconnect();
-  ro = new ResizeObserver(()=>{ if (isMobileGrid()) requestLayout(); });
-  ro.observe(m);
-})();
+  const h = tilesHost();
+
+  if (roMain){ roMain.disconnect(); roMain = null; }
+  if (roHost){ roHost.disconnect(); roHost = null; }
+
+  if (m){
+    roMain = new ResizeObserver(()=>{ if (isMobileGrid()) requestLayout(); });
+    roMain.observe(m);
+  }
+  if (h){
+    roHost = new ResizeObserver(()=>{ if (isMobileGrid()) requestLayout(); });
+    roHost.observe(h);
+  }
+}
+attachROs();
+document.addEventListener('DOMContentLoaded', attachROs);
 
 /* Перестраиваем при изменениях DOM/атрибутов (горячее подключение и т.п.) */
 const tilesMutObs = new MutationObserver((muts)=>{
