@@ -500,3 +500,50 @@ tm && tilesMutObs.observe(tm, {
 export function relayoutTilesIfMobile(){
   if (isMobileGrid()) layoutUniformGrid(); else clearGrid();
 }
+// === Унификация размеров: меньшая сторона видео = меньшей стороне иконки ===
+function getBaseMinSide(){
+  // берём первую не-видео плитку как эталон
+  const ref = document.querySelector('.tile:not(.has-video)');
+  if (ref) return Math.min(ref.clientWidth || 0, ref.clientHeight || 0) || 0;
+
+  // fallback: попробуем CSS-переменную --tile-s или твой дефолт
+  const r = getComputedStyle(document.documentElement);
+  const cssS = parseFloat(r.getPropertyValue('--tile-s')) || 0;
+  return cssS || 96; // последний рубеж
+}
+
+function sizeVideoTiles(){
+  const S = getBaseMinSide();
+  if (!S) return;
+
+  document.querySelectorAll('.tile.has-video').forEach(t => {
+    const v = t.querySelector('video');
+    if (!v) return;
+
+    // берём фактическое видео-AR; если ещё не готово — из data-ar или 16:9
+    const vw = v.videoWidth, vh = v.videoHeight;
+    let ar = (vw && vh) ? (vw / vh) : (parseFloat(t.dataset.ar) || 16/9);
+
+    // меньшею сторону фиксируем как S
+    const w = ar >= 1 ? S * ar : S;
+    const h = ar >= 1 ? S       : S / ar;
+
+    t.style.setProperty('--w', Math.round(w) + 'px');
+    t.style.setProperty('--h', Math.round(h) + 'px');
+    t.classList.add('sized-video');
+  });
+}
+
+// вызывать после любой перекладки/ресайза/смены ориентации:
+window.addEventListener('resize', sizeVideoTiles);
+document.addEventListener('visibilitychange', sizeVideoTiles, true);
+document.addEventListener('loadedmetadata', e => {
+  if (e.target && e.target.tagName === 'VIDEO') sizeVideoTiles();
+}, true);
+document.addEventListener('play', e => {
+  if (e.target && e.target.tagName === 'VIDEO') sizeVideoTiles();
+}, true);
+
+// если у тебя есть функция пересчёта мозаики — просто дерни sizeVideoTiles() в конце
+// например:
+// layoutMosaic = (...args) => { /* твой код */ ; sizeVideoTiles(); }

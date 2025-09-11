@@ -79,8 +79,15 @@ html, body{
   scroll-snap-align:unset;
 }
 .tile .controls{display:none !important}
-/* было: object-fit: cover; */
-.tile video { width:100%; height:100%; object-fit: contain; object-position:center; }
+/* Видео заполняет тайл как и иконки: меньшая сторона совпадает */
+.tile video{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:cover;         /* <-- ключевая правка */
+  object-position:center;
+}
+
 
 /* Кастомный скроллбар плиток — в портретной мозаике скрыт */
 .tiles-sbar{ display:none !important }
@@ -168,3 +175,11 @@ html, body{
 .tile{ box-sizing:border-box; }
 /* если у .tile.me где-то толще border — выровняйте: */
 .tile.me{ border-width:1px; padding:0; }  /* по необходимости; без width/height! */
+/* Иконки/превью тоже заполняют контейнер */
+.tile img{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:cover;
+  object-position:center;
+}
