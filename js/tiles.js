@@ -314,11 +314,12 @@ function layoutUniformGrid(){
   m.style.width = '100%';
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
 
-  // AR клетки по «большинству»
+  // AR ячейки берём по «большинству» тайлов; 1:1 — как запасной
   const ars = tiles.map(getTileAR);
   const portraits = ars.filter(a=>a<1).length;
   const cellAR = portraits > N/2 ? 9/16 : 16/9;
 
+  // ищем число колонок, чтобы занять максимум пространства
   let best = null;
 
   function tryCols(cols){
@@ -327,11 +328,13 @@ function layoutUniformGrid(){
     const cellHAvail = (H - gap * (rows - 1)) / rows;
     if (cellWAvail <= 0 || cellHAvail <= 0) return null;
 
+    // стремимся к максимальной площади клетки, но чтобы всё влазило
     const hByW = cellWAvail / cellAR;
     const wByH = cellHAvail * cellAR;
 
     let cw, ch;
     if (hByW <= cellHAvail && wByH <= cellWAvail){
+      // оба подходят — возьмём, что больше по площади
       const areaW = cellWAvail * hByW;
       const areaH = wByH * cellHAvail;
       if (areaW >= areaH){ cw = cellWAvail; ch = hByW; } else { cw = wByH; ch = cellHAvail; }
@@ -347,7 +350,7 @@ function layoutUniformGrid(){
     const filledH = ch * rows + gap * (rows - 1);
     const util = (filledW / W) * (filledH / H);
     const area = cw * ch;
-    return { cols, rows, cw, ch, util, area, filledW, filledH };
+    return { cols, rows, cw, ch, util, area };
   }
 
   for (let cols=1; cols<=N; cols++){
@@ -361,21 +364,18 @@ function layoutUniformGrid(){
   }
   if (!best){ clearGrid(); return; }
 
+  // Раскладываем абсолютно по одинаковым боксам
   m.style.position = 'relative';
   m.classList.add('grid-active');
 
   const px = (v)=> Math.round(v) + 'px';
-  const { cols, rows, cw, ch, filledW, filledH } = best;
-
-  // --- ЦЕНТРИРОВАНИЕ ---
-  const offX = Math.max(0, (W - filledW) / 2);
-  const offY = Math.max(0, (H - filledH) / 2);
+  const { cols, rows, cw, ch } = best;
 
   tiles.forEach((el, i)=>{
     const r = Math.floor(i / cols);
     const c = i % cols;
-    const left = offX + c * (cw + gap);
-    const top  = offY + r * (ch + gap);
+    const left = c * (cw + gap);
+    const top  = r * (ch + gap);
 
     el.style.boxSizing = 'border-box';
     el.style.position = 'absolute';
@@ -383,15 +383,12 @@ function layoutUniformGrid(){
     el.style.top  = px(top);
     el.style.setProperty('width',  px(cw), 'important');
     el.style.setProperty('height', px(ch), 'important');
-    el.style.aspectRatio = '';
+    el.style.aspectRatio = ''; // управляем width/height
   });
 
-  // высоту держим по фактическому полю, чтобы центрирование работало
-  m.style.height = px(H);
-
+  m.style.height = px(rows * ch + gap * (rows - 1));
   tiles.forEach(t=> t.classList.remove('spotlight','thumb'));
 }
-
 
 function clearGrid(){
   const m = tilesMain(); if (!m) return;
@@ -411,18 +408,9 @@ function clearGrid(){
 }
 
 /* --- реагируем на изменения окружения --- */
-// стало:
-window.addEventListener('resize', ()=>{
-  refreshAllTileAR();               // <- сначала обновим AR
-  if (isMobileGrid()) requestLayout();
-}, { passive:true });
+window.addEventListener('resize', ()=>{ if (isMobileGrid()) requestLayout(); }, { passive:true });
+window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ if (isMobileGrid()) requestLayout(); }, 60); }, { passive:true });
 
-window.addEventListener('orientationchange', ()=>{
-  setTimeout(()=>{
-    refreshAllTileAR();             // <- и при смене ориентации тоже
-    if (isMobileGrid()) requestLayout();
-  }, 60);
-}, { passive:true });
 /* ResizeObserver — следим и за .tiles-main, и за #tiles */
 let roMain = null;
 let roHost = null;
@@ -464,17 +452,4 @@ tm && tilesMutObs.observe(tm, {
 /* Экспорт — на случай ручного пересчёта извне */
 export function relayoutTilesIfMobile(){
   if (isMobileGrid()) layoutUniformGrid(); else clearGrid();
-}
-function refreshAllTileAR(){
-  const m = tilesMain();
-  if (!m) return;
-  m.querySelectorAll('.tile').forEach(tile=>{
-    const v = tile.querySelector('video');
-    if (!v) return;
-    const w = v.videoWidth|0, h = v.videoHeight|0;
-    if (!w || !h) return;
-    setPortraitFlag(tile, w, h);
-    const ar = (w/h).toFixed(6);
-    if (tile.dataset.ar !== ar) tile.dataset.ar = ar;
-  });
 }
