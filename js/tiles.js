@@ -1,8 +1,7 @@
-// tiles.js — uniform mobile grid: одинаковые боксы; видео внутри со своим AR
+// tiles.js — uniform grid: одинаковые боксы; видео внутри сохраняет свой AR
 import { ctx, state } from "./state.js";
 import { byId, hashColor, isMobileView } from "./utils.js";
-// ⬇️ вместо именованного импорта — неймспейс и опциональный вызов
-import * as layout from "./layout.js";
+import { fitSpotlightSize } from "./layout.js";
 
 /* ===== DOM helpers ===== */
 export function tilesMain(){ return byId('tilesMain'); }
@@ -12,7 +11,7 @@ export function getLocalTileVideo(){ return document.querySelector('.tile.me vid
 
 function isMobileGrid(){ return isMobileView() && !ctx.isStageFull; }
 
-/* ==== Overlay ==== */
+/* ==== Overlay (как было) ==== */
 const ov = byId('tileOverlay');
 const ovMedia = byId('ovMedia');
 const ovClose = byId('ovClose');
@@ -50,7 +49,7 @@ ovClose?.addEventListener('click', closeTileOverlay);
 ov?.addEventListener('click', (e)=>{ if(e.target===ov) closeTileOverlay(); });
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && ov?.classList.contains('open')) closeTileOverlay(); });
 
-/* ===== Создание тайла / строки ===== */
+/* ===== Создание тайла / строки в списке ===== */
 export function createTileEl(identity, name, isLocal){
   const el=document.createElement('div');
   el.className='tile' + (isLocal?' me':'');
@@ -108,7 +107,32 @@ export function createRowEl(identity, name){
 function setPortraitFlag(tile, w, h){
   tile.classList.toggle('portrait', h > w);
 }
+export function setTileAspectFromVideo(tile, videoEl){
+  const w = videoEl.videoWidth | 0;
+  const h = videoEl.videoHeight | 0;
+  if (!w || !h) return;
+  setPortraitFlag(tile, w, h);
+  tile.dataset.ar = (w>0 && h>0) ? (w/h).toFixed(6) : '';
+  tile.dataset.vid = '1'; // пометка «есть видео»
+  if (isMobileGrid()){
+    requestLayout();
+  } else if (tile.classList.contains('spotlight')) {
+    fitSpotlightSize();
+  }
+}
 
+export function applyCamTransformsTo(el){
+  if(!el) return;
+  const rot = state.settings.camFlip ? ' rotate(180deg)' : '';
+  const mir = state.settings.camMirror ? ' scaleX(-1)' : '';
+  el.style.transform = mir + rot;
+}
+export function applyCamTransformsToLive(){
+  const v = getLocalTileVideo();
+  applyCamTransformsTo(v);
+}
+
+/* — наблюдатель AR видео, чтобы ловить 16:9 ↔ 9:16 «на лету» — */
 function stopVideoARWatcher(v){
   const st = v && v.__arWatch;
   if(!st) return;
@@ -145,39 +169,6 @@ function startVideoARWatcher(v, tile){
     timer = setInterval(()=> check(), 300);
   }
   v.__arWatch = { onMeta, rfcb, timer };
-}
-
-export function setTileAspectFromVideo(tile, videoEl){
-  const w = videoEl.videoWidth | 0;
-  const h = videoEl.videoHeight | 0;
-  if (!w || !h) return;
-  setPortraitFlag(tile, w, h);
-  tile.dataset.ar  = (w>0 && h>0) ? (w/h).toFixed(6) : '';
-  tile.dataset.vid = '1'; // метка «есть видео»
-
-  // видео рисуем своим AR внутри фиксированного бокса
-  videoEl.style.width = '100%';
-  videoEl.style.height = '100%';
-  videoEl.style.objectFit = 'contain';
-  videoEl.style.objectPosition = 'center';
-
-  if (isMobileGrid()){
-    requestLayout();
-  } else if (tile.classList.contains('spotlight')) {
-    // опциональный вызов: если функции нет — просто ничего не делаем
-    layout?.fitSpotlightSize?.();
-  }
-}
-
-export function applyCamTransformsTo(el){
-  if(!el) return;
-  const rot = state.settings.camFlip ? ' rotate(180deg)' : '';
-  const mir = state.settings.camMirror ? ' scaleX(-1)' : '';
-  el.style.transform = mir + rot;
-}
-export function applyCamTransformsToLive(){
-  const v = getLocalTileVideo();
-  applyCamTransformsTo(v);
 }
 
 export function safeRemoveVideo(el){
@@ -222,12 +213,6 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
   tile.dataset.vid = newId || '1';
   tile.prepend(v);
 
-  // видео — своим AR внутри бокса
-  v.style.width = '100%';
-  v.style.height = '100%';
-  v.style.objectFit = 'contain';
-  v.style.objectPosition = 'center';
-
   if(isLocal && !identity.includes('#screen')) applyCamTransformsTo(v);
 
   const tryApply = ()=> setTileAspectFromVideo(tile, v);
@@ -262,7 +247,7 @@ export function showAvatarInTile(identity){
     ph.innerHTML=`<div class="avatar-ph">${(t.dataset.name||'?').slice(0,1).toUpperCase()}</div>`;
     t.prepend(ph);
   }
-  if (t.classList.contains('spotlight')) layout?.fitSpotlightSize?.();
+  if (t.classList.contains('spotlight')) fitSpotlightSize();
   requestLayout();
 }
 
@@ -284,6 +269,8 @@ export function attachAudioTrack(track, baseId){
 
 /* =========================================================================
    РАВНОМЕРНАЯ СЕТКА ДЛЯ МОБИЛЬНОГО РЕЖИМА
+   — все плитки ОДИНАКОВОГО размера (cellW × rowH)
+   — AR видео влияет только на содержимое внутри (через object-fit: contain)
    ========================================================================= */
 
 function getTileAR(tile){
@@ -327,13 +314,13 @@ function layoutUniformGrid(){
   m.style.width = '100%';
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
 
-  // AR ячейки берём по большинству
+  // AR клетки по «большинству»
   const ars = tiles.map(getTileAR);
   const portraits = ars.filter(a=>a<1).length;
   const cellAR = portraits > N/2 ? 9/16 : 16/9;
 
-  // ищем число колонок
   let best = null;
+
   function tryCols(cols){
     const rows = Math.ceil(N / cols);
     const cellWAvail = (W - gap * (cols - 1)) / cols;
@@ -360,7 +347,7 @@ function layoutUniformGrid(){
     const filledH = ch * rows + gap * (rows - 1);
     const util = (filledW / W) * (filledH / H);
     const area = cw * ch;
-    return { cols, rows, cw, ch, util, area };
+    return { cols, rows, cw, ch, util, area, filledW, filledH };
   }
 
   for (let cols=1; cols<=N; cols++){
@@ -374,39 +361,41 @@ function layoutUniformGrid(){
   }
   if (!best){ clearGrid(); return; }
 
-  // активируем режим, как ждёт CSS
   m.style.position = 'relative';
-  m.classList.add('mosaic-active');
+  m.classList.add('grid-active');
 
   const px = (v)=> Math.round(v) + 'px';
-  const { cols, rows, cw, ch } = best;
+  const { cols, rows, cw, ch, filledW, filledH } = best;
+
+  // --- ЦЕНТРИРОВАНИЕ ---
+  const offX = Math.max(0, (W - filledW) / 2);
+  const offY = Math.max(0, (H - filledH) / 2);
 
   tiles.forEach((el, i)=>{
     const r = Math.floor(i / cols);
     const c = i % cols;
-    const left = c * (cw + gap);
-    const top  = r * (ch + gap);
+    const left = offX + c * (cw + gap);
+    const top  = offY + r * (ch + gap);
 
+    el.style.boxSizing = 'border-box';
     el.style.position = 'absolute';
     el.style.left = px(left);
     el.style.top  = px(top);
-
-    el.style.setProperty('--mw', px(cw));
-    el.style.setProperty('--mh', px(ch));
     el.style.setProperty('width',  px(cw), 'important');
     el.style.setProperty('height', px(ch), 'important');
-
-    el.style.boxSizing = 'border-box';
     el.style.aspectRatio = '';
   });
 
-  m.style.height = px(rows * ch + gap * (rows - 1));
+  // высоту держим по фактическому полю, чтобы центрирование работало
+  m.style.height = px(H);
+
   tiles.forEach(t=> t.classList.remove('spotlight','thumb'));
 }
 
+
 function clearGrid(){
   const m = tilesMain(); if (!m) return;
-  m.classList.remove('mosaic-active');
+  m.classList.remove('grid-active');
   m.style.position = '';
   m.style.height   = '';
   m.style.width    = '';
@@ -417,16 +406,23 @@ function clearGrid(){
     t.style.removeProperty('width');
     t.style.removeProperty('height');
     t.style.removeProperty('box-sizing');
-    t.style.removeProperty('--mw');
-    t.style.removeProperty('--mh');
     t.style.aspectRatio = '';
   });
 }
 
 /* --- реагируем на изменения окружения --- */
-window.addEventListener('resize', ()=>{ if (isMobileGrid()) requestLayout(); }, { passive:true });
-window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ if (isMobileGrid()) requestLayout(); }, 60); }, { passive:true });
+// стало:
+window.addEventListener('resize', ()=>{
+  refreshAllTileAR();               // <- сначала обновим AR
+  if (isMobileGrid()) requestLayout();
+}, { passive:true });
 
+window.addEventListener('orientationchange', ()=>{
+  setTimeout(()=>{
+    refreshAllTileAR();             // <- и при смене ориентации тоже
+    if (isMobileGrid()) requestLayout();
+  }, 60);
+}, { passive:true });
 /* ResizeObserver — следим и за .tiles-main, и за #tiles */
 let roMain = null;
 let roHost = null;
@@ -449,7 +445,7 @@ function attachROs(){
 attachROs();
 document.addEventListener('DOMContentLoaded', attachROs);
 
-/* Перестройка при добавлении/удалении и смене атрибутов */
+/* Перестраиваем при изменениях DOM/атрибутов (горячие подключения, смена AR) */
 const tilesMutObs = new MutationObserver((muts)=>{
   if (!isMobileGrid()) return;
   for (const m of muts){
@@ -465,7 +461,20 @@ tm && tilesMutObs.observe(tm, {
   attributeFilter:['data-ar','class','data-vid']
 });
 
-/* Экспорт */
+/* Экспорт — на случай ручного пересчёта извне */
 export function relayoutTilesIfMobile(){
   if (isMobileGrid()) layoutUniformGrid(); else clearGrid();
+}
+function refreshAllTileAR(){
+  const m = tilesMain();
+  if (!m) return;
+  m.querySelectorAll('.tile').forEach(tile=>{
+    const v = tile.querySelector('video');
+    if (!v) return;
+    const w = v.videoWidth|0, h = v.videoHeight|0;
+    if (!w || !h) return;
+    setPortraitFlag(tile, w, h);
+    const ar = (w/h).toFixed(6);
+    if (tile.dataset.ar !== ar) tile.dataset.ar = ar;
+  });
 }
