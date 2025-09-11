@@ -3,7 +3,6 @@
 import { ctx, state } from "./state.js";
 import { byId, hashColor, isMobileView } from "./utils.js";
 import { fitSpotlightSize } from "./layout.js";
-import { fitSpotlightSize } from "./layout.js";
 /* ===== DOM helpers ===== */
 export function tilesMain(){ return byId('tilesMain'); }
 export function tilesRail(){ return byId('tilesRail'); }
