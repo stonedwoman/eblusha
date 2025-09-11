@@ -183,3 +183,9 @@ html, body{
   object-fit:cover;
   object-position:center;
 }
+/* чтобы centering работал предсказуемо */
+.tiles-main{
+  position: relative;   /* уже есть, но не помешает */
+  height: 100%;         /* контейнеру-родителю дай высоту через грид (у тебя так) */
+  min-height: 0;
+}
