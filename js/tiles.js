@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 // tiles.js — равномерная сетка (uniform grid) c единой ячейкой для обычных,
 // но видео-тайлы растягиваются по своему AR на кратное число колонок.
+=======
+// tiles.js — uniform grid: одинаковые боксы; видео внутри сохраняет свой AR
+>>>>>>> parent of dbfcb2b (Update tiles.js)
 import { ctx, state } from "./state.js";
 import { byId, hashColor, isMobileView } from "./utils.js";
 // ⬇️ важное отличие: больше НЕТ именованного импорта
@@ -106,10 +110,17 @@ export function createRowEl(identity, name){
 }
 
 /* ===== Видео/Аудио ===== */
+<<<<<<< HEAD
+=======
+function setPortraitFlag(tile, w, h){
+  tile.classList.toggle('portrait', h > w);
+}
+>>>>>>> parent of dbfcb2b (Update tiles.js)
 export function setTileAspectFromVideo(tile, videoEl){
   const w = videoEl.videoWidth | 0;
   const h = videoEl.videoHeight | 0;
   if (!w || !h) return;
+<<<<<<< HEAD
 
   tile.classList.toggle('portrait', h > w);
   tile.dataset.ar = (w>0 && h>0) ? (w/h).toFixed(6) : '';
@@ -120,6 +131,15 @@ export function setTileAspectFromVideo(tile, videoEl){
   } else if (tile.classList.contains('spotlight')) {
     // безопасный (необязательный) вызов из layout.js
     layout?.fitSpotlightSize?.();
+=======
+  setPortraitFlag(tile, w, h);
+  tile.dataset.ar = (w>0 && h>0) ? (w/h).toFixed(6) : '';
+  tile.dataset.vid = '1'; // пометка «есть видео»
+  if (isMobileGrid()){
+    requestLayout();
+  } else if (tile.classList.contains('spotlight')) {
+    fitSpotlightSize();
+>>>>>>> parent of dbfcb2b (Update tiles.js)
   }
 }
 
@@ -134,6 +154,48 @@ export function applyCamTransformsToLive(){
   applyCamTransformsTo(v);
 }
 
+<<<<<<< HEAD
+=======
+/* — наблюдатель AR видео, чтобы ловить 16:9 ↔ 9:16 «на лету» — */
+function stopVideoARWatcher(v){
+  const st = v && v.__arWatch;
+  if(!st) return;
+  try{
+    v.removeEventListener('loadedmetadata', st.onMeta);
+    v.removeEventListener('loadeddata', st.onMeta);
+    v.removeEventListener('resize', st.onMeta);
+  }catch{}
+  if (st.rfcb && v.cancelVideoFrameCallback){ try{ v.cancelVideoFrameCallback(st.rfcb); }catch{} }
+  if (st.timer){ clearInterval(st.timer); }
+  v.__arWatch = null;
+}
+function startVideoARWatcher(v, tile){
+  if (!v || v.__arWatch) return;
+  let lastW = 0, lastH = 0;
+  const check = (ww, hh)=>{
+    const w = (ww|0) || (v.videoWidth|0);
+    const h = (hh|0) || (v.videoHeight|0);
+    if (!w || !h) return;
+    if (w!==lastW || h!==lastH){
+      lastW = w; lastH = h;
+      setTileAspectFromVideo(tile, v);
+    }
+  };
+  const onMeta = ()=> check();
+  v.addEventListener('loadedmetadata', onMeta);
+  v.addEventListener('loadeddata', onMeta);
+  v.addEventListener('resize', onMeta);
+  let rfcb = 0, timer = 0;
+  if (typeof v.requestVideoFrameCallback === 'function'){
+    const loop = (_now, meta)=>{ check(meta?.width|0, meta?.height|0); rfcb = v.requestVideoFrameCallback(loop); };
+    rfcb = v.requestVideoFrameCallback(loop);
+  } else {
+    timer = setInterval(()=> check(), 300);
+  }
+  v.__arWatch = { onMeta, rfcb, timer };
+}
+
+>>>>>>> parent of dbfcb2b (Update tiles.js)
 export function safeRemoveVideo(el){
   try{ el.pause?.(); }catch{}
   try{ el.srcObject = null; }catch{}
@@ -228,10 +290,16 @@ export function attachAudioTrack(track, baseId){
 }
 
 /* =========================================================================
+<<<<<<< HEAD
    РАВНОМЕРНАЯ СЕТКА (UNIFORM) С «SPAN BY AR» ДЛЯ ВИДЕО-ТАЙЛОВ
    — обычные плитки: единый размер ячейки по всей сетке
    — видео-плитки: ширина = span*cellW (+gaps), где span≈AR_video/AR_cell
    — расчёт ведём по #tiles (fallback: #tilesMain)
+=======
+   РАВНОМЕРНАЯ СЕТКА ДЛЯ МОБИЛЬНОГО РЕЖИМА
+   — все плитки ОДИНАКОВОГО размера (cellW × rowH)
+   — AR видео влияет только на содержимое внутри (через object-fit: contain)
+>>>>>>> parent of dbfcb2b (Update tiles.js)
    ========================================================================= */
 
 function hasVideo(tile){
@@ -304,10 +372,25 @@ function layoutUniformGrid(){
 
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
 
+<<<<<<< HEAD
   const cellAR = pickCellAR(tiles);
 
   // подберём число колонок (1..N)
   let best = null;
+=======
+  // AR клетки по «большинству»
+  const ars = tiles.map(getTileAR);
+  const portraits = ars.filter(a=>a<1).length;
+  const cellAR = portraits > N/2 ? 9/16 : 16/9;
+
+  let best = null;
+
+  function tryCols(cols){
+    const rows = Math.ceil(N / cols);
+    const cellWAvail = (W - gap * (cols - 1)) / cols;
+    const cellHAvail = (H - gap * (rows - 1)) / rows;
+    if (cellWAvail <= 0 || cellHAvail <= 0) return null;
+>>>>>>> parent of dbfcb2b (Update tiles.js)
 
   function packAndMeasure(cols){
     const cw = (W - gap*(cols-1)) / cols;
@@ -340,6 +423,7 @@ function layoutUniformGrid(){
     }
     if (row.length) rows.push(row);
 
+<<<<<<< HEAD
     const totalH = rows.length * ch + gap*(rows.length-1);
 
     // метрика: 1) не превышать высоту, 2) ближе к H, 3) меньше «пустых» ячеек
@@ -352,6 +436,13 @@ function layoutUniformGrid(){
     const score = (fits?0:10000) + Math.abs(H-totalH) + blanks*5;
 
     return { cols, cw, ch, rows, totalH, blanks, score };
+=======
+    const filledW = cw * cols + gap * (cols - 1);
+    const filledH = ch * rows + gap * (rows - 1);
+    const util = (filledW / W) * (filledH / H);
+    const area = cw * ch;
+    return { cols, rows, cw, ch, util, area, filledW, filledH };
+>>>>>>> parent of dbfcb2b (Update tiles.js)
   }
 
   for (let cols=1; cols<=N; cols++){
@@ -361,11 +452,15 @@ function layoutUniformGrid(){
   }
   if (!best){ clearGrid(); return; }
 
+<<<<<<< HEAD
   // раскладываем
+=======
+>>>>>>> parent of dbfcb2b (Update tiles.js)
   m.style.position = 'relative';
   m.classList.add('grid-active');
 
   const px = (v)=> Math.round(v) + 'px';
+<<<<<<< HEAD
   const { cw, ch, rows } = best;
 
   let y = 0;
@@ -391,8 +486,35 @@ function layoutUniformGrid(){
   }
 
   m.style.height = px(y - gap);
+=======
+  const { cols, rows, cw, ch, filledW, filledH } = best;
+
+  // --- ЦЕНТРИРОВАНИЕ ---
+  const offX = Math.max(0, (W - filledW) / 2);
+  const offY = Math.max(0, (H - filledH) / 2);
+
+  tiles.forEach((el, i)=>{
+    const r = Math.floor(i / cols);
+    const c = i % cols;
+    const left = offX + c * (cw + gap);
+    const top  = offY + r * (ch + gap);
+
+    el.style.boxSizing = 'border-box';
+    el.style.position = 'absolute';
+    el.style.left = px(left);
+    el.style.top  = px(top);
+    el.style.setProperty('width',  px(cw), 'important');
+    el.style.setProperty('height', px(ch), 'important');
+    el.style.aspectRatio = '';
+  });
+
+  // высоту держим по фактическому полю, чтобы центрирование работало
+  m.style.height = px(H);
+
+>>>>>>> parent of dbfcb2b (Update tiles.js)
   tiles.forEach(t=> t.classList.remove('spotlight','thumb'));
 }
+
 
 function clearGrid(){
   const m = tilesMain(); if (!m) return;
@@ -412,9 +534,18 @@ function clearGrid(){
 }
 
 /* --- реагируем на изменения окружения --- */
-window.addEventListener('resize', ()=>{ if (isMobileGrid()) requestLayout(); }, { passive:true });
-window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ if (isMobileGrid()) requestLayout(); }, 60); }, { passive:true });
+// стало:
+window.addEventListener('resize', ()=>{
+  refreshAllTileAR();               // <- сначала обновим AR
+  if (isMobileGrid()) requestLayout();
+}, { passive:true });
 
+window.addEventListener('orientationchange', ()=>{
+  setTimeout(()=>{
+    refreshAllTileAR();             // <- и при смене ориентации тоже
+    if (isMobileGrid()) requestLayout();
+  }, 60);
+}, { passive:true });
 /* ResizeObserver — следим и за .tiles-main, и за #tiles */
 let roMain = null;
 let roHost = null;
@@ -437,7 +568,11 @@ function attachROs(){
 attachROs();
 document.addEventListener('DOMContentLoaded', attachROs);
 
+<<<<<<< HEAD
 /* Перестраиваем при изменениях DOM/атрибутов (горячее подключение, смена AR) */
+=======
+/* Перестраиваем при изменениях DOM/атрибутов (горячие подключения, смена AR) */
+>>>>>>> parent of dbfcb2b (Update tiles.js)
 const tilesMutObs = new MutationObserver((muts)=>{
   if (!isMobileGrid()) return;
   for (const m of muts){
@@ -456,4 +591,17 @@ tm && tilesMutObs.observe(tm, {
 /* Экспорт — на случай ручного пересчёта извне */
 export function relayoutTilesIfMobile(){
   if (isMobileGrid()) layoutUniformGrid(); else clearGrid();
+}
+function refreshAllTileAR(){
+  const m = tilesMain();
+  if (!m) return;
+  m.querySelectorAll('.tile').forEach(tile=>{
+    const v = tile.querySelector('video');
+    if (!v) return;
+    const w = v.videoWidth|0, h = v.videoHeight|0;
+    if (!w || !h) return;
+    setPortraitFlag(tile, w, h);
+    const ar = (w/h).toFixed(6);
+    if (tile.dataset.ar !== ar) tile.dataset.ar = ar;
+  });
 }
