@@ -78,10 +78,6 @@ html, body{
   aspect-ratio:16 / 9;                 /* временно; JS снимет и проставит размеры */
   scroll-snap-align:unset;
 }
-.tile.me{
-  width: auto !important;
-  height: auto !important;
-}
 .tile .controls{display:none !important}
 .tile video{width:100%; height:100%; object-fit:cover; object-position:center}
 
@@ -160,3 +156,15 @@ html, body{
 .foot-dots .fdot:focus-visible{
   outline:2px solid rgba(255,255,255,.6); outline-offset:2px;
 }
+/* Мозаика: размеры задаёт JS через CSS-переменные */
+.tiles-main.mosaic-active .tile{
+  position:absolute;                /* на всякий случай, если где-то переопределили */
+  width: var(--mw) !important;      /* размеры, проставленные из JS */
+  height: var(--mh) !important;
+  box-sizing: border-box;           /* чтобы рамки/паддинги не раздували тайл */
+}
+
+/* Унификация: чтобы "моя" плитка не была больше из-за рамки/паддингов */
+.tile{ box-sizing:border-box; }
+/* если у .tile.me где-то толще border — выровняйте: */
+.tile.me{ border-width:1px; padding:0; }  /* по необходимости; без width/height! */
