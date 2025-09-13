@@ -79,6 +79,7 @@ html, body{
   scroll-snap-align:unset;
 }
 .tile .controls{display:none !important}
+<<<<<<< HEAD
 /* Видео заполняет тайл как и иконки: меньшая сторона совпадает */
 .tile video{
   width:100%;
@@ -88,6 +89,9 @@ html, body{
   object-position:center;
 }
 
+=======
+.tile video{width:100%; height:100%; object-fit:cover; object-position:center}
+>>>>>>> parent of f7235b8 (0.84)
 
 /* Кастомный скроллбар плиток — в портретной мозаике скрыт */
 .tiles-sbar{ display:none !important }
@@ -104,6 +108,7 @@ html, body{
   display:flex;
   width:100%;
   min-width:0;
+  height:var(--footer-h, 260px);
   overflow-x:auto; overflow-y:hidden;
   scroll-snap-type:x mandatory;
   -webkit-overflow-scrolling:touch;
