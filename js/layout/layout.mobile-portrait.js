@@ -3,6 +3,11 @@ import { ctx } from "../state.js";
 import { byId, isMobileView } from "../utils.js";
 import { createTileEl, tilesMain, relayoutTilesIfMobile } from "../tiles.js";
 import { usersCounterText } from "../registry.js";
+// ===== Mobile Landscape layout (equal grid + footer carousel) =====
+import { ctx } from "./state.js";
+import { byId } from "./utils.js";
+import { createTileEl, tilesMain } from "./tiles.js";
+import { usersCounterText } from "./registry.js";
 
 /* ----------------------------- Утилиты ----------------------------------- */
 const on  = (el, ev, fn, opts) => el && el.addEventListener(ev, fn, opts);
@@ -133,6 +138,74 @@ function attachSbarEvents(){
 }
 
 /* ======================== ФУТЕР-КАРУСЕЛЬ (портрет) ======================= */
+/* =================== Равномерная сетка с фиксированным 16:9 ============== */
+function applyEqualGrid(){
+  const m = tilesMain();
+  if (!m) return;
+
+  const tiles = m.querySelectorAll('.tile');
+  const N = tiles.length;
+  if (!N) return;
+
+  const box = m.getBoundingClientRect();
+  const W = Math.max(0, box.width);
+  const H = Math.max(0, box.height);
+  if (W < 10 || H < 10) { requestAnimationFrame(applyEqualGrid); return; }
+
+  const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
+  const AR  = 16/9;
+
+  let best = { area: -1, cols: 1, rows: N, cellW: 0, cellH: 0 };
+
+  for (let cols = 1; cols <= N; cols++){
+    const rows = Math.ceil(N / cols);
+
+    const wAvail = W - gap * (cols - 1);
+    const hAvail = H - gap * (rows - 1);
+
+    // по ширине
+    let cellW = Math.floor(wAvail / cols);
+    let cellH = Math.floor(cellW / AR);
+    if (rows * cellH <= hAvail && cellW > 0 && cellH > 0){
+      const area = cellW * cellH;
+      if (area > best.area) best = { area, cols, rows, cellW, cellH };
+    }
+
+    // по высоте
+    cellH = Math.floor(hAvail / rows);
+    cellW = Math.floor(cellH * AR);
+    if (cols * cellW <= wAvail && cellW > 0 && cellH > 0){
+      const area = cellW * cellH;
+      if (area > best.area) best = { area, cols, rows, cellW, cellH };
+    }
+  }
+
+  m.style.setProperty('--grid-cols', String(best.cols));
+  m.style.setProperty('--cell-h', `${best.cellH}px`);
+
+  // подчистим инлайны
+  tiles.forEach(t=>{
+    t.style.aspectRatio = '';
+    t.style.width = '';
+    t.style.height = '';
+  });
+}
+function settleGrid(){
+  applyEqualGrid();
+  requestAnimationFrame(applyEqualGrid);
+  setTimeout(applyEqualGrid, 60);
+}
+
+/* Подсветка активных спикеров (общая фича) */
+export function highlightSpeaking(ids){
+  const set=new Set(ids);
+  document.querySelectorAll('.tile').forEach(t=>t.classList.remove('speaking'));
+  set.forEach(id=>{
+    document.querySelector(`.tile[data-pid="${CSS.escape(id)}"]`)?.classList.add('speaking');
+  });
+}
+
+/* ======================== ФУТЕР-КАРУСЕЛЬ (ландшафт) ====================== */
 let sidebarMounted = false;
 let sidebarPlaceholder = null;
 
@@ -151,6 +224,41 @@ const getNonSidebarPanes = () => getFootPanes().filter(p => p !== getSidebarPane
 const getDots      = () => qsa('.foot-dots .fdot');
 const markDots = (idx)=> getDots().forEach((d,i)=> d.classList.toggle('active', i===idx));
 
+/* --- Поиск списка «Подключены» надёжнее --- */
+function getSidebar(){ return qs('.sidebar'); }
+/** Предпочитаем #onlineList, затем похожие классы, затем .list как фолбэк */
+function findOnlineList(){
+  const sb = getSidebar();
+  // строго внутри sidebar
+  let el = sb?.querySelector('#onlineList, .online-list') || null;
+  if (!el) el = sb?.querySelector('.list #onlineList, .list .online-list') || null;
+  if (!el) el = sb?.querySelector('#onlineList, .online-list, .list') || null;
+  // глобальный фолбэк (если уже вынесли из сайдбара или верстка другая)
+  if (!el) el = document.querySelector('#onlineList, .online-list');
+  return el || null;
+}
+
+/* --- если элемента ещё нет, ждём его появление и монтируем --- */
+let waitObs = null;
+function waitAndMountSidebarIfReady(){
+  if (sidebarMounted) return;
+  const fs = getFootSwipe();
+  const list = findOnlineList();
+  if (fs && list) { mountSidebarIntoFootSwipe(); return; }
+
+  if (waitObs) waitObs.disconnect();
+  waitObs = new MutationObserver(() => {
+    const fs2 = getFootSwipe();
+    const l2 = findOnlineList();
+    if (fs2 && l2){
+      waitObs.disconnect(); waitObs = null;
+      mountSidebarIntoFootSwipe();
+    }
+  });
+  waitObs.observe(document.body, { childList:true, subtree:true });
+}
+
+/* Панели «Настройки» и «Чат» */
 function getSettingsPane(){
   const list = getNonSidebarPanes();
   const byClass = list.find(p => p.querySelector('.me-card') || p.dataset.role === 'settings');
@@ -250,23 +358,40 @@ function withPreservedFsScroll(fn, preserve = true){
     suppressDetect = false;
   }
 }
+
+/* === МОНТАЖ «ПОДКЛЮЧЕНЫ» В КАРУСЕЛЬ === */
 function mountSidebarIntoFootSwipe(){
-  if (sidebarMounted) return;
+  if (sidebarMounted && getSidebarPane()) return;
 
-  const sidebar   = qs('.sidebar');
   const footSwipe = getFootSwipe();
-  if (!sidebar || !footSwipe) return;
+  const list = findOnlineList();
+  if (!footSwipe || !list) { waitAndMountSidebarIfReady(); return; }
 
-  const list = sidebar.querySelector('.list') || sidebar.querySelector('#onlineList');
-  if (!list) return;
+  // Если список уже в нужной панели — просто выровняем порядок
+  const existingPane = list.closest('.foot-pane.sidebar-pane');
+  if (existingPane && existingPane.parentElement === footSwipe){
+    sidebarMounted = true;
+    ensureFootSwipeOrder(false);
+    return;
+  }
 
-  sidebarPlaceholder = document.createElement('div');
-  sidebarPlaceholder.className = 'sidebar-placeholder';
-  list.parentElement.insertBefore(sidebarPlaceholder, list);
+  // Создадим плейсхолдер, чтобы вернуть список обратно при выходе из мобайла
+  if (!sidebarPlaceholder){
+    sidebarPlaceholder = document.createElement('div');
+    sidebarPlaceholder.className = 'sidebar-placeholder';
+    if (list.parentElement) list.parentElement.insertBefore(sidebarPlaceholder, list);
+  }
 
-  const pane = document.createElement('div');
-  pane.className = 'foot-pane sidebar-pane';
+  // Панель «Подключены» (если её нет)
+  let pane = getSidebarPane();
+  if (!pane){
+    pane = document.createElement('div');
+    pane.className = 'foot-pane sidebar-pane';
+  } else {
+    pane.textContent = ''; // очистим, на случай старого содержимого
+  }
 
+  // Обёртка и заголовок (заголовок скрыт)
   const title = document.createElement('h3');
   title.textContent = 'Подключены';
   title.style.cssText = 'display:none';
@@ -279,7 +404,7 @@ function mountSidebarIntoFootSwipe(){
   pane.appendChild(wrapper);
 
   withPreservedFsScroll(()=> {
-    footSwipe.insertBefore(pane, footSwipe.firstChild);
+    if (!pane.parentElement) footSwipe.insertBefore(pane, footSwipe.firstChild);
   }, /*preserve*/ false);
 
   sidebarMounted = true;
@@ -315,11 +440,13 @@ function mountSidebarIntoFootSwipe(){
     markDots(activePaneIdx);
   }
 }
+
 function unmountSidebarFromFootSwipe(){
   if (!sidebarMounted) return;
 
-  const pane = qs('.foot-pane.sidebar-pane');
-  const list = pane?.querySelector('.list > .list, .list > #onlineList') || pane?.querySelector('.list');
+  const pane = getSidebarPane();
+  // Берём сам список из панели (внутри wrapper.list)
+  const list = pane?.querySelector('.list > #onlineList, .list > .online-list, .list > .list') || pane?.querySelector('.list');
   if (list && sidebarPlaceholder && sidebarPlaceholder.parentElement) {
     sidebarPlaceholder.parentElement.replaceChild(list, sidebarPlaceholder);
   }
@@ -333,11 +460,12 @@ function unmountSidebarFromFootSwipe(){
 
   footSwipeInitialized = false;
 }
+
 function ensureFootSwipeOrder(preserve = true){
   const fs = getFootSwipe();
   if (!fs) return;
 
-  const sidebarPane  = getSidebarPane();
+  const sidebarPane  = getSidebarPane() || null;
   const settingsPane = getSettingsPane();
   const chatPane     = getChatPane();
 
@@ -387,6 +515,7 @@ export function applyLayout(){
     if (t.parentElement !== main) main.appendChild(t);
   });
 
+ HEAD
   // 🧩 Мозаичная раскладка из tiles.js
   relayoutTilesIfMobile();
 
@@ -394,8 +523,11 @@ export function applyLayout(){
   updateMobileScrollbar(true);
 
   // Удержим активную панель карусели
-  alignToActivePane('instant');
 
+  applyEqualGrid();
+  // убеждаемся, что модуль «Подключены» смонтирован
+  mountSidebarIntoFootSwipe();
+  alignToActivePane('instant');
   updateUsersCounter();
 }
 
@@ -403,11 +535,17 @@ export function applyLayout(){
 export function initLayout(){
   updateUsersCounter();
 
+ HEAD
   // Перенос «Подключены» и порядок панелей
+
+  // Попробуем смонтировать сразу, иначе дождёмся появления узлов
   mountSidebarIntoFootSwipe();
+  waitAndMountSidebarIfReady();
+
   ensureFootSwipeOrder(true);
   alignToActivePane('instant');
 
+ HEAD
   // События скроллбара
   attachSbarEvents();
   const tm = tilesMain();
@@ -435,6 +573,9 @@ export function initLayout(){
     }, 60);
   }, { passive:true });
 
+  // Пересчёты сетки
+  on(window, 'resize', ()=> settleGrid(), { passive:true });
+  on(window, 'orientationchange', ()=> setTimeout(settleGrid, 60), { passive:true });
   // Первый прогон
   applyLayout();
 }
