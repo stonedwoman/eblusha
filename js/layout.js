@@ -1,138 +1,131 @@
-// layout.js — совместимый слой (shim) для импортов из разных модулей.
-// Экспортируем: fitSpotlightSize, applyLayout, queueSbarUpdate,
-//               updateUsersCounter, updateMobileScrollbar (и алиас updateMobileScrollBar).
+// js/layout.js
+// Универсальный слой совместимости: гарантирует наличие именованных экспортов,
+// а затем (лениво) подтягивает профиль из ./layout/*.js и подменяет реализации.
 
-const raf = (fn) =>
-  (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : setTimeout(fn, 0));
+// ===== утилиты
+const raf = (fn) => requestAnimationFrame(fn);
+const emitResize = () => { try { window.dispatchEvent(new Event("resize")); } catch {} };
 
-function emitResize() {
-  try { window.dispatchEvent(new Event('resize')); } catch {}
-}
-
-/* ================= Spotlight ================= */
-export function fitSpotlightSize() {
-  try {
-    const media =
-      document.querySelector('.tile.spotlight video') ||
-      document.querySelector('.tile.spotlight img')   ||
-      document.querySelector('#spotlight video')      ||
-      document.querySelector('#spotlight img');
-
-    if (media) {
-      media.style.width = '100%';
-      media.style.height = '100%';
-      media.style.objectFit = 'contain';
-      media.style.objectPosition = 'center';
-    }
-
-    const stage = document.querySelector('.stage') || document.querySelector('#stage');
-    if (stage) {
-      stage.style.minHeight = '0';
-      stage.style.overflow = 'hidden';
-    }
-  } catch {}
-  emitResize();
-}
-
-/* ============== Кастомный/мобильный скроллбар плиток ============== */
-let _sbarRaf = 0;
-
-function _updateScrollbarCore() {
-  try {
-    const host =
-      document.querySelector('#tiles') ||
-      document.querySelector('#tilesMain') ||
-      document.querySelector('.tiles-main');
-
-    // рейл скроллбара — любые распространённые селекторы
-    const rail =
-      document.querySelector('.tiles-sbar') ||
-      document.querySelector('#tilesSbar') ||
-      document.querySelector('#mobileSbar');
-
-    if (!host || !rail) return;
-
-    const need = host.scrollHeight > host.clientHeight + 1;
-    rail.style.display = need ? '' : 'none';
-
-    // тут можно добавить синхронизацию ползунка, если он кастомный
-  } catch {}
-}
-
-export function queueSbarUpdate() {
-  if (_sbarRaf) cancelAnimationFrame(_sbarRaf);
-  _sbarRaf = raf(() => {
-    _sbarRaf = 0;
-    _updateScrollbarCore();
-  });
-}
-
-/** Обновление мобильного скроллбара (совместимый API). */
-export function updateMobileScrollbar() {
-  // делаем мгновенный апдейт + ставим в очередь ещё один — чтобы схлопнулись мутации
-  _updateScrollbarCore();
-  queueSbarUpdate();
-}
-// На всякий случай экспортируем алиас с другой раскладкой буквы B
-export { updateMobileScrollbar as updateMobileScrollBar };
-
-/* ================= Общий пересчёт раскладки ================= */
-export function applyLayout() {
-  raf(() => {
-    emitResize();
-    // обновим все виды скроллбара
-    updateMobileScrollbar();
-  });
-}
-
-/* ================= Счётчик участников ================= */
-export function updateUsersCounter(n) {
-  try {
-    let count = Number.isFinite(n) ? Number(n) : NaN;
-
-    if (!Number.isFinite(count)) {
-      const candidates = [
-        '#onlineList .user',
-        '.participants .user',
-        '#tilesMain .tile',
-        '#tiles .tile',
-      ];
-      for (const sel of candidates) {
-        const els = document.querySelectorAll(sel);
-        if (els && els.length) { count = els.length; break; }
+// ===== дефолтные реализации (безопасные, минимальные)
+const impl = {
+  fitSpotlightSize() {
+    try {
+      const media =
+        document.querySelector(".tile.spotlight video") ||
+        document.querySelector(".tile.spotlight img") ||
+        document.querySelector("#spotlight video") ||
+        document.querySelector("#spotlight img");
+      if (media) {
+        media.style.width = "100%";
+        media.style.height = "100%";
+        media.style.objectFit = "contain";
+        media.style.objectPosition = "center";
       }
-      if (!Number.isFinite(count)) count = 0;
-    }
+      const stage = document.querySelector(".stage") || document.querySelector("#stage");
+      if (stage) { stage.style.minHeight = "0"; stage.style.overflow = "hidden"; }
+    } catch {}
+    emitResize();
+  },
 
-    const targets = [
-      '#usersCounter', '#onlineCounter', '#participantsCount',
-      '.usersCounter', '.onlineCounter', '.participantsCount',
-      '#users-count', '#online-count', '.users-count', '.online-count',
-      '#participants-counter', '.participants-counter'
-    ];
-    for (const sel of targets) {
-      const el = document.querySelector(sel);
-      if (el) el.textContent = String(count);
-    }
+  applyLayout() {
+    // небольшой «пинок» в следующий кадр
+    raf(() => { emitResize(); impl.queueSbarUpdate(); });
+  },
 
-    if (document && typeof document.title === 'string') {
-      const base = document.title.replace(/^\(\d+\)\s*/, '');
-      document.title = `(${count}) ${base}`;
-    }
-  } catch {}
-}
+  queueSbarUpdate() {
+    if (impl.__sbarRaf) cancelAnimationFrame(impl.__sbarRaf);
+    impl.__sbarRaf = raf(() => {
+      impl.__sbarRaf = 0;
+      try {
+        const host =
+          document.querySelector("#tiles") ||
+          document.querySelector("#tilesMain") ||
+          document.querySelector(".tiles-main");
+        const rail = document.querySelector(".tiles-sbar") || document.querySelector(".mobile-sbar");
+        if (!host || !rail) return;
+        const need = host.scrollHeight > host.clientHeight + 1;
+        rail.style.display = need ? "" : "none";
+      } catch {}
+    });
+  },
 
-/* ================= Глобальные алиасы ================= */
+  // устаревшее название в части кода — просто алиас
+  updateMobileScrollbar() { impl.queueSbarUpdate(); },
+
+  updateUsersCounter() {
+    try {
+      const nTiles = document.querySelectorAll(".tile").length;
+      const nUsers = document.querySelectorAll("#onlineList .user, .user-list .user").length;
+      const n = Math.max(nTiles, nUsers);
+      const el =
+        document.querySelector("#usersCounter") ||
+        document.querySelector("#onlineCounter") ||
+        document.querySelector(".users-counter");
+      if (el) el.textContent = String(n);
+    } catch {}
+  },
+
+  // подсветка говорящего; терпимо к разным сигнатурам
+  highlightSpeaking(identity, on = true) {
+    try {
+      let pid = identity;
+      if (identity && typeof identity === "object") {
+        pid = identity.identity || identity.participantId || identity.pid || identity.id;
+      }
+      if (typeof pid !== "string") return;
+      const sel = `.tile[data-pid="${CSS.escape(pid)}"]`;
+      document.querySelectorAll(sel).forEach(t => t.classList.toggle("speaking", !!on));
+    } catch {}
+  },
+};
+
+// ===== экспортируем «обёртки», которые делегируют в текущую impl
+export function fitSpotlightSize (...a){ return impl.fitSpotlightSize(...a); }
+export function applyLayout      (...a){ return impl.applyLayout(...a); }
+export function queueSbarUpdate  (...a){ return impl.queueSbarUpdate(...a); }
+export function updateMobileScrollbar(...a){ return impl.updateMobileScrollbar(...a); }
+export function updateUsersCounter(...a){ return impl.updateUsersCounter(...a); }
+export function highlightSpeaking(...a){ return impl.highlightSpeaking(...a); }
+
+// ===== глобальные алиасы (некоторые места зовут через globalThis)
 try {
   globalThis.layout = globalThis.layout || {};
-  globalThis.layout.fitSpotlightSize     = fitSpotlightSize;
-  globalThis.layout.applyLayout          = applyLayout;
-  globalThis.layout.queueSbarUpdate      = queueSbarUpdate;
-  globalThis.layout.updateUsersCounter   = updateUsersCounter;
-  globalThis.layout.updateMobileScrollbar= updateMobileScrollbar;
-
-  // На случай очень старых вызовов напрямую:
-  if (typeof globalThis.fitSpotlightSize !== 'function') {
+  Object.assign(globalThis.layout, {
+    fitSpotlightSize, applyLayout, queueSbarUpdate,
+    updateMobileScrollbar, updateUsersCounter, highlightSpeaking
+  });
+  if (typeof globalThis.fitSpotlightSize !== "function") {
     globalThis.fitSpotlightSize = fitSpotlightSize;
   }
 } catch {}
+
+// ===== попытка лениво подгрузить конкретный профиль из ./layout/*.js
+function pickProfilePath(){
+  try {
+    const isMobile = matchMedia("(max-width: 900px)").matches;
+    const isPortrait = matchMedia("(orientation: portrait)").matches;
+    if (isMobile) {
+      return isPortrait
+        ? "./layout/layout.mobile-portrait.js"
+        : "./layout/layout.mobile-landscape.js";
+    }
+    return "./layout/layout.desktop.js";
+  } catch {
+    return "./layout/layout.desktop.js";
+  }
+}
+
+(async () => {
+  try {
+    const mod = await import(pickProfilePath());
+    // В профильных файлах могут быть частичные реализации — аккуратно подменяем имеющиеся
+    [
+      "fitSpotlightSize", "applyLayout", "queueSbarUpdate",
+      "updateMobileScrollbar", "updateUsersCounter", "highlightSpeaking"
+    ].forEach(k => {
+      if (typeof mod[k] === "function") impl[k] = mod[k];
+    });
+  } catch {
+    // если профиль не загрузился — остаёмся на дефолтных реализациях
+  }
+})();
