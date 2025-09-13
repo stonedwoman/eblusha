@@ -1,6 +1,6 @@
 // layout.js — совместимый слой (shim) для импортов из разных модулей.
-// Экспортируем: fitSpotlightSize, applyLayout, queueSbarUpdate, updateUsersCounter.
-// Плюс дублируем их в globalThis.layout для безопасного вызова без импорта.
+// Экспортируем: fitSpotlightSize, applyLayout, queueSbarUpdate,
+//               updateUsersCounter, updateMobileScrollbar (и алиас updateMobileScrollBar).
 
 const raf = (fn) =>
   (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : setTimeout(fn, 0));
@@ -9,7 +9,7 @@ function emitResize() {
   try { window.dispatchEvent(new Event('resize')); } catch {}
 }
 
-/* ===== Spotlight: подгоняем медиа внутри .tile.spotlight ===== */
+/* ================= Spotlight ================= */
 export function fitSpotlightSize() {
   try {
     const media =
@@ -34,33 +34,60 @@ export function fitSpotlightSize() {
   emitResize();
 }
 
-/* ===== Скроллбар/лэйаут ===== */
+/* ============== Кастомный/мобильный скроллбар плиток ============== */
 let _sbarRaf = 0;
+
+function _updateScrollbarCore() {
+  try {
+    const host =
+      document.querySelector('#tiles') ||
+      document.querySelector('#tilesMain') ||
+      document.querySelector('.tiles-main');
+
+    // рейл скроллбара — любые распространённые селекторы
+    const rail =
+      document.querySelector('.tiles-sbar') ||
+      document.querySelector('#tilesSbar') ||
+      document.querySelector('#mobileSbar');
+
+    if (!host || !rail) return;
+
+    const need = host.scrollHeight > host.clientHeight + 1;
+    rail.style.display = need ? '' : 'none';
+
+    // тут можно добавить синхронизацию ползунка, если он кастомный
+  } catch {}
+}
 
 export function queueSbarUpdate() {
   if (_sbarRaf) cancelAnimationFrame(_sbarRaf);
   _sbarRaf = raf(() => {
     _sbarRaf = 0;
-    try {
-      const host = document.querySelector('#tiles') || document.querySelector('#tilesMain');
-      const rail = document.querySelector('.tiles-sbar');
-      if (!host || !rail) return;
-
-      const need = host.scrollHeight > host.clientHeight + 1;
-      rail.style.display = need ? '' : 'none';
-      // здесь можно синхронизировать кастомный ползунок (если он есть)
-    } catch {}
+    _updateScrollbarCore();
   });
 }
 
+/** Обновление мобильного скроллбара (совместимый API). */
+export function updateMobileScrollbar() {
+  // делаем мгновенный апдейт + ставим в очередь ещё один — чтобы схлопнулись мутации
+  _updateScrollbarCore();
+  queueSbarUpdate();
+}
+// На всякий случай экспортируем алиас с другой раскладкой буквы B
+export { updateMobileScrollbar as updateMobileScrollBar };
+
+/* ================= Общий пересчёт раскладки ================= */
 export function applyLayout() {
-  raf(() => { emitResize(); queueSbarUpdate(); });
+  raf(() => {
+    emitResize();
+    // обновим все виды скроллбара
+    updateMobileScrollbar();
+  });
 }
 
-/* ===== Счётчик участников (совместимый API) ===== */
+/* ================= Счётчик участников ================= */
 export function updateUsersCounter(n) {
   try {
-    // Если число не передали — попробуем вывести из DOM.
     let count = Number.isFinite(n) ? Number(n) : NaN;
 
     if (!Number.isFinite(count)) {
@@ -77,7 +104,6 @@ export function updateUsersCounter(n) {
       if (!Number.isFinite(count)) count = 0;
     }
 
-    // Куда пишем: пытаемся найти популярные id/классы
     const targets = [
       '#usersCounter', '#onlineCounter', '#participantsCount',
       '.usersCounter', '.onlineCounter', '.participantsCount',
@@ -89,7 +115,6 @@ export function updateUsersCounter(n) {
       if (el) el.textContent = String(count);
     }
 
-    // Обновим бейдж в тайтле, если хочется
     if (document && typeof document.title === 'string') {
       const base = document.title.replace(/^\(\d+\)\s*/, '');
       document.title = `(${count}) ${base}`;
@@ -97,15 +122,16 @@ export function updateUsersCounter(n) {
   } catch {}
 }
 
-/* ===== Глобальные алиасы ===== */
+/* ================= Глобальные алиасы ================= */
 try {
   globalThis.layout = globalThis.layout || {};
-  globalThis.layout.fitSpotlightSize  = fitSpotlightSize;
-  globalThis.layout.applyLayout       = applyLayout;
-  globalThis.layout.queueSbarUpdate   = queueSbarUpdate;
-  globalThis.layout.updateUsersCounter= updateUsersCounter;
+  globalThis.layout.fitSpotlightSize     = fitSpotlightSize;
+  globalThis.layout.applyLayout          = applyLayout;
+  globalThis.layout.queueSbarUpdate      = queueSbarUpdate;
+  globalThis.layout.updateUsersCounter   = updateUsersCounter;
+  globalThis.layout.updateMobileScrollbar= updateMobileScrollbar;
 
-  // На случай очень старых вызовов:
+  // На случай очень старых вызовов напрямую:
   if (typeof globalThis.fitSpotlightSize !== 'function') {
     globalThis.fitSpotlightSize = fitSpotlightSize;
   }
