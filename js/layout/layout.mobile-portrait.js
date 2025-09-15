@@ -14,7 +14,6 @@ export function updateUsersCounter(){
   const tag = byId('usersTag');
   if (tag) tag.textContent = usersCounterText();
 }
-
 /* ------------------------- Подсветка говорящих --------------------------- */
 export function highlightSpeaking(ids){
   const set = new Set(ids);
