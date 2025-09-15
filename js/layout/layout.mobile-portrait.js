@@ -1,6 +1,7 @@
 // ===== Mobile Portrait layout (mosaic from tiles.js + scrollbar + footer carousel) =====
 import { ctx } from "../state.js";
 import { byId, isMobileView } from "../utils.js";
+import { updateFootDotsActive, initFootDots } from "../ui-settings-ice-init.js";
 import { createTileEl, tilesMain, relayoutTilesIfMobile } from "../tiles.js";
 import { usersCounterText } from "../registry.js";
 
@@ -170,8 +171,7 @@ let fsScrollHandler = null;
 
 const getFootSwipe = () => qs('.foot-swipe');
 const getFootPanes = () => { const fs = getFootSwipe(); return fs ? qsa('.foot-pane', fs) : []; };
-const getDots      = () => qsa('.foot-dots .fdot');
-const markDots = (idx)=> getDots().forEach((d,i)=> d.classList.toggle('active', i===idx));
+// dots handled centrally in ui-settings-ice-init.js via updateFootDotsActive()
 
 function loadSavedPaneIdx(){
   try{
@@ -208,11 +208,12 @@ function alignToActivePane(behavior = 'instant'){
     try{ fs.scrollTo({ left, behavior:'instant' }); }catch{ fs.scrollLeft = left; } 
     // persist after programmatic align
     saveActivePaneIdx();
+    updateFootDotsActive();
     FS('aligned', { idx: activePaneIdx, slAfter: fs.scrollLeft });
     suppressDetect = false; 
   }, 80);
 
-  markDots(activePaneIdx);
+  updateFootDotsActive();
 }
 
 function detectActivePaneIdx(){
@@ -246,10 +247,12 @@ function attachFsScrollWatcher(){
     if (suppressDetect) return;
     if (t) return;
     t = setTimeout(()=>{
-      window.activePaneIdx = detectActivePaneIdx();
+      const fs = getFootSwipe();
+      if (fs && fs.clientWidth > 0){ window.activePaneIdx = Math.round(fs.scrollLeft / fs.clientWidth); }
+      else { window.activePaneIdx = detectActivePaneIdx(); }
       activePaneIdx = window.activePaneIdx;
       saveActivePaneIdx();
-      markDots(activePaneIdx);
+      updateFootDotsActive();
       t = null;
     }, 100);
   };
@@ -353,14 +356,8 @@ export function initLayout(){
       fsResizeObs.observe(fs);
     }
 
-    const dots = getDots();
-    if (dots.length){
-      dots.forEach((dot, i)=>{
-        on(dot, 'click',   ()=> scrollFootSwipeToPane(i, 'smooth'));
-        on(dot, 'keydown', (e)=>{ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scrollFootSwipeToPane(i, 'smooth'); }});
-      });
-      markDots(activePaneIdx);
-    }
+    try { initFootDots(); } catch {}
+    updateFootDotsActive();
 
     window.footSwipeInitialized = true;
   }
