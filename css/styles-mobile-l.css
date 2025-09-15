@@ -1,149 +1,158 @@
-/* ===== MOBILE landscape (<=950px, touch) ===== */
-@media (max-width: 950px) and (hover:none) and (pointer:coarse) and (orientation:landscape){
-  /* layout */
-  #screen-app{
-    /* две колонки: слева stage, справа вертикальная панель (footer) */
+/* ===== MOBILE LANDSCAPE (<=950px, touch) ===== */
+@media (max-width: 950px) and (hover: none) and (pointer: coarse) and (orientation: landscape) {
+  
+  /* Grid layout: stage left, vertical footer panel right */
+  #screen-app {
     grid-template-columns: 1fr min(420px, 40vw);
     grid-template-rows: 1fr;
     grid-template-areas: "stage footer";
     min-height: 100vh;
     height: 100dvh;
   }
-  .stage  { grid-area: stage;  margin-top: 5vh; margin-bottom: 5vh; }
-  .footer { grid-area: footer; display:block; align-content:center; }
-  .sidebar{ display:none !important; }
-
-  /* footer carousel */
-  .foot-swipe{
-    display:flex;
-    overflow-x:auto;
-    scroll-snap-type:x mandatory;
-    -webkit-overflow-scrolling:touch;
-    scrollbar-width:none;
-    -ms-overflow-style:none;
-    width:100%;
+  
+  .stage {
+    grid-area: stage;
+    margin-top: 5vh;
+    margin-bottom: 5vh;
   }
-  .foot-swipe::-webkit-scrollbar{ display:none; }
+  
+  .footer {
+    grid-area: footer;
+    display: block;
+    align-content: center;
+  }
+  
+  /* Hide main sidebar - content moved to carousel */
+  .sidebar {
+    display: none !important;
+  }
 
-  /* ВАЖНО: ширина панели = 100% вьюпорта карусели */
-  .foot-pane{
-    scroll-snap-align:start;
-    flex: 0 0 100%;          /* было: 0 0 0 100% — из-за нуля всё схлопывалось */
-    /* padding: 0 12px 0 0; */
+  /* Footer carousel */
+  .foot-swipe {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    width: 100%;
+  }
+  
+  .foot-swipe::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Panel width = 100% of carousel viewport */
+  .foot-pane {
+    scroll-snap-align: start;
+    flex: 0 0 100%;
+    padding: 12px;
     min-width: 100%;
-    display:block;           /* не делаем её флекс-контейнером */
+    display: block;
   }
-  .foot-pane:last-child{ border-right:none; }
+  
+  .foot-pane:last-child {
+    border-right: none;
+  }
 
-  .foot-pane.sidebar-pane .list{
-    margin: 0px;
-    padding:10px;
-    overflow:auto;
-    border:1px solid var(--line);
-    border-radius:var(--radius);
-    background:var(--panel);
+  /* Sidebar panel styles */
+  .foot-pane.sidebar-pane .list {
+    margin: 0;
+    padding: 10px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
     min-height: 46vh;
   }
 
-  .btn.send{ display:block; width:100%; }
-
-  /* dots (пейджер) */
-  .foot-dots{
-    display:flex; justify-content:center; align-items:center; gap:10px;
-    padding:5px;
-  }
-  .foot-dots .fdot{
-    width:12px; height:16px; border-radius:50%;
-    background:transparent; border:2px solid var(--dots);
-    opacity:.85; transform:scale(.95);
-    transition:transform .18s ease, opacity .18s ease, background .18s ease, border-color .18s ease;
-  }
-  .foot-dots .fdot.active{
-    background:var(--dots); border-color:var(--dots);
-    opacity:1; transform:scale(1.1);
-  }
-  .foot-dots .fdot:focus-visible{
-    outline:2px solid rgba(255,255,255,.6); outline-offset:2px;
+  /* Show send button */
+  .btn.send {
+    display: block;
+    width: 100%;
   }
 
-  /* tiles: равномерная сетка 16:9 по центру */
-  .tiles{
-    display:flex !important;
-    align-items:center; justify-content:center;
-    height:100%; min-height:0; margin:10px;
-    font-size:14px; /* стабильный размер на моб. горизонтали */
+  /* Pagination dots */
+  .foot-dots {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    padding: 5px;
   }
-  .tiles-main{
-    display:grid;
+  
+  .foot-dots .fdot {
+    width: 12px;
+    height: 16px;
+    border-radius: 50%;
+    background: transparent;
+    border: 2px solid var(--dots);
+    opacity: .85;
+    transform: scale(.95);
+    transition: transform .18s ease, opacity .18s ease, background .18s ease, border-color .18s ease;
+  }
+  
+  .foot-dots .fdot.active {
+    background: var(--dots);
+    border-color: var(--dots);
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  
+  .foot-dots .fdot:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, .6);
+    outline-offset: 2px;
+  }
+
+  /* Tiles: uniform 16:9 grid centered */
+  .tiles {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 0;
+    margin: 10px;
+    font-size: 14px;
+  }
+  
+  .tiles-main {
+    display: grid;
     grid-template-columns: repeat(var(--grid-cols, 2), 1fr);
     grid-auto-rows: var(--cell-h, 140px);
     gap: var(--tile-gap);
-    align-content:center;
-    justify-items:stretch;
+    align-content: center;
+    justify-items: stretch;
+    height: auto;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+  
+  .tile {
+    width: 100%;
     height: 100%;
-    width:100%;
-    min-width:0;        /* чтобы сетка могла расширяться обратно */
-    min-height:0;
+    aspect-ratio: 16/9 !important;
   }
-  .tile{
-    width:100%; height:100%;
-    aspect-ratio:16/9 !important;
-  }
-  .tile.me, .tile.has-avatar{ aspect-ratio:16/9 !important; }
-
-  /* если на десктопе карусель «сплющили» — вернём обычный рендер */
-  .foot-swipe{display:flex !important;}
-  .foot-pane{display:block !important;/* min-height: 265px; */ /* ===== MOBILE landscape (<=950px, touch) ===== */@media (max-width: 950px) and (hover:none) and (pointer:coarse) and (orientation:landscape){
-  /* layout */
-  #screen-app{
-    /* две колонки: слева stage, справа вертикальная панель (footer) */
-    grid-template-columns: 1fr min(420px, 40vw);grid-template-rows: 1fr;grid-template-areas:
-"stage footer";min-height: 100vh;height: 100dvh;
-  }
-  .stage  {grid-area: stage;margin-top: 5vh;margin-bottom: 5vh; }
-  .footer {grid-area: footer;display:block;align-content:center; }
-  .sidebar{display:none !important; }
-
-  /* footer carousel */
-  .foot-swipe{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;width:100%;
-  }
-  .foot-swipe::-webkit-scrollbar{ display:none; }
-
-  /* ВАЖНО: ширина панели = 100% вьюпорта карусели */
-  .foot-pane{scroll-snap-align:start;flex: 0 0 100%;          /* было: 0 0 0 100% — из-за нуля всё схлопывалось */padding: 12px;min-width: 100%;display:block;           /* не делаем её флекс-контейнером */
-  }
-  .foot-pane:last-child{ border-right:none; }
-
-  .foot-pane.sidebar-pane .list{margin:0;padding:10px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
+  
+  .tile.me,
+  .tile.has-avatar {
+    aspect-ratio: 16/9 !important;
   }
 
-  .btn.send{display:block;width:100%; }
-
-  /* dots (пейджер) */
-  .foot-dots{display:flex;justify-content:center;align-items:center;gap:10px;padding:5px;
+  /* Override desktop carousel flattening */
+  .foot-swipe {
+    display: flex !important;
   }
-  .foot-dots .fdot{width:12px;height:16px;border-radius:50%;background:transparent;border:2px solid var(--dots);opacity:.85;transform:scale(.95);transition:transform .18s ease, opacity .18s ease, background .18s ease, border-color .18s ease;
+  
+  .foot-pane {
+    display: block !important;
   }
-  .foot-dots .fdot.active{background:var(--dots);border-color:var(--dots);opacity:1;transform:scale(1.1);
+  
+  .foot-dots {
+    display: flex !important;
   }
-  .foot-dots .fdot:focus-visible{
-    outline:2px solid rgba(255,255,255,.6);outline-offset:2px;
-  }
-
-  /* tiles: равномерная сетка 16:9 по центру */
-  .tiles{display:flex !important;align-items:center;justify-content:center;height:100%;min-height:0;margin:10px;font-size:14px; /* стабильный размер на моб. горизонтали */
-  }
-  .tiles-main{display:grid;grid-template-columns: repeat(var(--grid-cols, 2), 1fr);grid-auto-rows: var(--cell-h, 140px);gap: var(--tile-gap);align-content:center;justify-items:stretch;height:auto;width:100%;min-width:0;        /* чтобы сетка могла расширяться обратно */min-height:0;
-  }
-  .tile{width:100%;height:100%;aspect-ratio:16/9 !important;
-  }
-  .tile.me, .tile.has-avatar{aspect-ratio:16/9 !important; }
-
-  /* если на десктопе карусель «сплющили» — вернём обычный рендер */
-  .foot-swipe{display:flex !important; }
-  .foot-pane{display:block !important; }  /* было flex — ломало ширину */
-  .foot-dots{display:flex !important; }
-};}  /* было flex — ломало ширину */
-  .foot-dots{  display:flex !important; }
 }
-.chat-log{min-height: 135px;}
+
+.chat-log {
+  min-height: 135px;
+}
