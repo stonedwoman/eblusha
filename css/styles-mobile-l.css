@@ -3,9 +3,10 @@
   
   /* Grid layout: stage left, vertical footer panel right */
   #screen-app {
-    grid-template-columns: 1fr min(420px, 40vw);
+    grid-template-columns: 1fr clamp(280px, 30vw, 420px);
     grid-template-rows: 1fr;
     grid-template-areas: "stage footer";
+    padding-right: 5px; /* прижимаем правую колонку к краю, оставляя тонкий отступ */
     min-height: 100vh;
     height: 100dvh;
   }
@@ -21,6 +22,7 @@
     display: grid;
     grid-template-rows: 1fr; /* основной контент */
     align-items: center;
+    justify-items: stretch; /* растягиваем контент по ширине колонки */
     position: relative; /* для абсолютного позиционирования точек */
     padding-bottom: 28px; /* резерв под точки */
   }
@@ -39,6 +41,7 @@
     scrollbar-width: none;
     -ms-overflow-style: none;
     width: 100%;
+    justify-self: stretch; /* гарантируем 100% ширину */
   }
   .footer > .foot-swipe { align-self: center; }
   
