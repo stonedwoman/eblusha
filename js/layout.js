@@ -88,7 +88,19 @@ export function fitSpotlightSize (...a){
 export function applyLayout      (...a){ 
   if (typeof impl.applyLayout === 'function') return impl.applyLayout(...a);
   // fallback для случаев, когда модуль ещё не загрузился
-  try { window.dispatchEvent(new Event("resize")); } catch {}
+  console.warn('applyLayout not ready, using fallback');
+  try { 
+    // Попробуем пересчитать layout через событие
+    window.dispatchEvent(new Event("resize")); 
+    // И через небольшой таймаут ещё раз
+    setTimeout(() => {
+      if (typeof impl.applyLayout === 'function') {
+        impl.applyLayout(...a);
+      }
+    }, 100);
+  } catch (e) {
+    console.error('Layout fallback failed:', e);
+  }
 }
 export function queueSbarUpdate  (...a){ 
   if (typeof impl.queueSbarUpdate === 'function') return impl.queueSbarUpdate(...a);
@@ -120,41 +132,89 @@ function pickProfilePath(){
   try {
     const isMobile = matchMedia("(max-width: 900px)").matches;
     const isPortrait = matchMedia("(orientation: portrait)").matches;
+    console.log('Profile selection:', { isMobile, isPortrait, width: window.innerWidth, height: window.innerHeight });
+    
     if (isMobile) {
-      return isPortrait
+      const profile = isPortrait
         ? "./layout/layout.mobile-portrait.js"
         : "./layout/layout.mobile-landscape.js";
+      console.log('Selected mobile profile:', profile);
+      return profile;
     }
+    console.log('Selected desktop profile');
     return "./layout/layout.desktop.js";
-  } catch {
+  } catch (e) {
+    console.error('Error in pickProfilePath:', e);
     return "./layout/layout.desktop.js";
   }
 }
 
 // Загружаем профиль сразу, не асинхронно
 let profileLoaded = false;
+let profileLoading = false;
+
 function loadProfile() {
-  if (profileLoaded) return;
+  if (profileLoaded || profileLoading) return;
+  profileLoading = true;
+  
   try {
     const profilePath = pickProfilePath();
+    console.log('Loading layout profile:', profilePath);
+    
     // Используем динамический импорт, но ждём его завершения
     import(profilePath).then(mod => {
+      console.log('Layout profile loaded:', profilePath);
+      
       // В профильных файлах могут быть частичные реализации — аккуратно подменяем имеющиеся
       [
         "fitSpotlightSize", "applyLayout", "queueSbarUpdate",
         "updateMobileScrollbar", "updateUsersCounter", "highlightSpeaking"
       ].forEach(k => {
-        if (typeof mod[k] === "function") impl[k] = mod[k];
+        if (typeof mod[k] === "function") {
+          impl[k] = mod[k];
+          console.log(`Layout function ${k} loaded`);
+        }
       });
+      
+      // Вызываем initLayout если он есть в модуле
+      if (typeof mod.initLayout === "function") {
+        console.log('Calling initLayout from profile');
+        mod.initLayout();
+      }
+      
       profileLoaded = true;
-    }).catch(() => {
+      profileLoading = false;
+    }).catch(e => {
+      console.warn('Failed to load layout profile:', e);
       // если профиль не загрузился — остаёмся на дефолтных реализациях
       profileLoaded = true;
+      profileLoading = false;
     });
-  } catch {
+  } catch (e) {
+    console.error('Error loading profile:', e);
     profileLoaded = true;
+    profileLoading = false;
   }
 }
 
 // Запускаем загрузку сразу
 loadProfile();
+
+// Обработчик изменения ориентации для перезагрузки профиля
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => {
+    console.log('Orientation changed, reloading layout profile');
+    profileLoaded = false;
+    profileLoading = false;
+    loadProfile();
+  }, 100);
+}, { passive: true });
+
+// Обработчик изменения размера окна для перезагрузки профиля
+window.addEventListener('resize', () => {
+  setTimeout(() => {
+    const currentProfile = pickProfilePath();
+    console.log('Window resized, checking if profile needs reload:', currentProfile);
+    // Здесь можно добавить логику для проверки, нужно ли перезагружать профиль
+  }, 100);
+}, { passive: true });

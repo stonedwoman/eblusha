@@ -141,10 +141,10 @@ button, input, select, textarea {
 /* ===== APP LAYOUT (DESKTOP BASE) ===== */
 #screen-app {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+    grid-template-columns: var(--sidebar-w) 1fr;
   grid-template-rows: 1fr var(--footer-h);
-  min-height: 100vh;
-  height: 100dvh;
+    min-height: 100vh;
+    height: 100dvh;
   overflow: hidden;
 }
 
@@ -152,8 +152,8 @@ button, input, select, textarea {
 .sidebar {
   grid-row: 1;
   display: flex;
-  flex-direction: column;
-  background: var(--bg2);
+    flex-direction: column;
+    background: var(--bg2);
   min-width: var(--sidebar-w);
 }
 
@@ -176,7 +176,7 @@ button, input, select, textarea {
 }
 
 .user {
-  display: flex;
+    display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
@@ -192,7 +192,7 @@ button, input, select, textarea {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  display: grid;
+    display: grid;
   place-items: center;
   font-weight: 700;
   color: #111;
@@ -207,9 +207,9 @@ button, input, select, textarea {
 /* ===== STAGE ===== */
 .stage {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
   min-height: 0;
   padding: var(--m-stage-pad);
 }
@@ -275,13 +275,13 @@ body.no-scroll {
 
 .stage-full .tiles {
   flex: 1;
-  min-height: 0;
+    min-height: 0;
 }
 
 /* ===== TILES CONTAINER ===== */
 .tiles {
   flex: 1;
-  min-height: 0;
+    min-height: 0;
   padding: var(--m-tiles-pad);
   display: flex;
   align-items: center;
@@ -294,9 +294,9 @@ body.no-scroll {
 }
 
 .tiles.spotlight {
-  display: grid;
+    display: grid;
   grid-template-columns: minmax(0, 1fr) var(--rail-w);
-  gap: var(--tile-gap);
+    gap: var(--tile-gap);
 }
 
 .tiles.spotlight.single {
@@ -306,7 +306,7 @@ body.no-scroll {
 .tiles-main {
   position: relative;
   min-height: 0;
-  height: 100%;
+    height: 100%;
   display: grid;
   grid-template-columns: repeat(1, 1fr);
   gap: var(--tile-gap);
@@ -446,14 +446,14 @@ body.no-scroll {
 }
 
 /* ===== FOOTER (DESKTOP) ===== */
-.footer {
+  .footer {
   grid-column: 1 / 3;
   grid-row: 2;
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
   align-items: stretch;
   gap: 0;
-  background: var(--bg2);
+    background: var(--bg2);
 }
 
 .footer-left {
@@ -461,17 +461,17 @@ body.no-scroll {
 }
 
 .me-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
 
 .me-row {
-  display: grid;
+    display: grid;
   grid-template-columns: auto 1fr;
   gap: 12px;
   align-items: center;
@@ -481,7 +481,7 @@ body.no-scroll {
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  display: grid;
+    display: grid;
   place-items: center;
   font-weight: 800;
   color: #111;
@@ -507,7 +507,7 @@ body.no-scroll {
   border-radius: 16px;
   border: 1px solid var(--line);
   background: #1f2329;
-  display: grid;
+    display: grid;
   place-items: center;
   font-size: 20px;
   cursor: pointer;
@@ -521,7 +521,7 @@ body.no-scroll {
 }
 
 .leave-btn {
-  display: grid;
+    display: grid;
   place-items: center;
   height: 60px;
   border-radius: 18px;
@@ -678,7 +678,7 @@ body.no-scroll {
 }
 
 .tile-ov .ov-media video {
-  width: 100% !important;
+    width: 100% !important;
   height: 100% !important;
   object-fit: contain;
   position: static;
@@ -711,11 +711,11 @@ body.no-scroll {
   width: min(680px, 92vw);
   max-height: 90vh;
   background: var(--bg2);
-  border: 1px solid var(--line);
+    border: 1px solid var(--line);
   border-radius: 16px;
   box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
+    display: flex;
+    flex-direction: column;
   overflow: hidden;
 }
 
@@ -728,7 +728,7 @@ body.no-scroll {
 .modal-body {
   padding: 12px;
   overflow: auto;
-  display: grid;
+    display: grid;
   gap: 12px;
 }
 
@@ -736,7 +736,7 @@ body.no-scroll {
   padding: 12px;
   border-top: 1px solid var(--line);
   background: var(--bg3);
-  display: flex;
+    display: flex;
   gap: 10px;
   align-items: center;
 }
@@ -762,14 +762,14 @@ body.no-scroll {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--bg3);
-  display: grid;
+    display: grid;
   place-items: center;
-  overflow: hidden;
+    overflow: hidden;
 }
 
 .cam-preview video {
-  width: 100% !important;
-  height: 100% !important;
+    width: 100% !important;
+    height: 100% !important;
   object-fit: cover;
 }
 

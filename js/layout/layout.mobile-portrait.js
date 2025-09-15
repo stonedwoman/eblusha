@@ -142,13 +142,31 @@ function attachSbarEvents(){
 }
 
 /* ======================== ФУТЕР-КАРУСЕЛЬ (портрет) ======================= */
-let footSwipeInitialized = false;
-let activePaneIdx = 1;
+// Используем глобальные переменные для предотвращения повторной инициализации
+if (typeof window.footSwipeInitialized === 'undefined') {
+  window.footSwipeInitialized = false;
+}
+
+// Минимальный логгер для карусели
+const FS = (tag, data={})=> console.log('FS[p]', tag, data);
+
+// Восстанавливаем активную панель из sessionStorage, по умолчанию 1 (Настройки)
+const STORAGE_KEY = 'footPaneIdx_v1';
+let savedIdx = null; try { const raw = sessionStorage.getItem(STORAGE_KEY); savedIdx = raw!=null ? +raw : null; } catch {}
+window.activePaneIdx = Number.isFinite(savedIdx) ? savedIdx : 1;
+let activePaneIdx = window.activePaneIdx;
+FS('init', { profile:'portrait', savedIdx, active: activePaneIdx });
+
+console.log('Mobile Portrait: Initializing with global state:', {
+  footSwipeInitialized: window.footSwipeInitialized,
+  activePaneIdx: window.activePaneIdx,
+  localActivePaneIdx: activePaneIdx
+});
 let suppressDetect = false;
 let fsResizeObs = null;
 let fsScrollHandler = null;
 
-const STORAGE_KEY = 'footPaneIdx_v1';
+// ключ объявлен выше
 
 const getFootSwipe = () => qs('.foot-swipe');
 const getFootPanes = () => { const fs = getFootSwipe(); return fs ? qsa('.foot-pane', fs) : []; };
@@ -163,11 +181,12 @@ function loadSavedPaneIdx(){
 }
 
 function saveActivePaneIdx(){
-  try{ sessionStorage.setItem(STORAGE_KEY, String(activePaneIdx)); }catch{}
+  try{ sessionStorage.setItem(STORAGE_KEY, String(window.activePaneIdx)); }catch{}
 }
 
 export function scrollFootSwipeToPane(idx, behavior = 'instant'){
-  activePaneIdx = Math.max(0, Math.min(idx, getFootPanes().length - 1));
+  window.activePaneIdx = Math.max(0, Math.min(idx, getFootPanes().length - 1));
+  activePaneIdx = window.activePaneIdx;
   saveActivePaneIdx();
   alignToActivePane(behavior);
 }
@@ -180,10 +199,18 @@ function alignToActivePane(behavior = 'instant'){
   if (!target) return;
 
   const left = target.offsetLeft;
+  FS('align', { idx: activePaneIdx, left, slBefore: fs.scrollLeft, vw: fs.clientWidth });
+  
   suppressDetect = true;
   try{ fs.scrollTo({ left, behavior }); }catch{ fs.scrollLeft = left; }
   requestAnimationFrame(()=> { try{ fs.scrollTo({ left, behavior:'instant' }); }catch{ fs.scrollLeft = left; }});
-  setTimeout(()=> { try{ fs.scrollTo({ left, behavior:'instant' }); }catch{ fs.scrollLeft = left; } suppressDetect = false; }, 80);
+  setTimeout(()=> { 
+    try{ fs.scrollTo({ left, behavior:'instant' }); }catch{ fs.scrollLeft = left; } 
+    // persist after programmatic align
+    saveActivePaneIdx();
+    FS('aligned', { idx: activePaneIdx, slAfter: fs.scrollLeft });
+    suppressDetect = false; 
+  }, 80);
 
   markDots(activePaneIdx);
 }
@@ -219,7 +246,8 @@ function attachFsScrollWatcher(){
     if (suppressDetect) return;
     if (t) return;
     t = setTimeout(()=>{
-      activePaneIdx = detectActivePaneIdx();
+      window.activePaneIdx = detectActivePaneIdx();
+      activePaneIdx = window.activePaneIdx;
       saveActivePaneIdx();
       markDots(activePaneIdx);
       t = null;
@@ -291,15 +319,29 @@ export function initLayout(){
     setTimeout(()=>{
       relayoutTilesIfMobile();
       updateMobileScrollbar(false);
+      // Сохраняем текущую панель перед сменой ориентации
+      saveActivePaneIdx();
     }, 60);
   }, { passive:true });
 
   // Инициализация футер-карусели
-  if (!footSwipeInitialized) {
+  const footSwipe = getFootSwipe();
+  if (!footSwipe) return;
+  
+  // Если карусель уже инициализирована, просто выравниваем по активной панели
+  if (window.footSwipeInitialized) {
+    FS('reinit-align', { idx: activePaneIdx });
+    alignToActivePane('instant');
+    return;
+  }
+  
+  if (!window.footSwipeInitialized) {
+    const panes = getFootPanes();
+    FS('panes', { count: panes.length });
+    
     const saved = loadSavedPaneIdx();
-    if (saved != null) {
-      activePaneIdx = saved;
-    }
+    FS('saved', { saved });
+    if (saved != null){ window.activePaneIdx = saved; activePaneIdx = saved; }
     
     attachFsScrollWatcher();
     alignToActivePane('instant');
@@ -320,7 +362,7 @@ export function initLayout(){
       markDots(activePaneIdx);
     }
 
-    footSwipeInitialized = true;
+    window.footSwipeInitialized = true;
   }
 
   // Первый прогон

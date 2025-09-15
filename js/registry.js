@@ -37,6 +37,14 @@ export function unregisterParticipant(id){
 
   rec.tile?.remove();
   rec.row?.remove();
+  
+  // Удаляем из обоих списков участников
+  const lists = document.querySelectorAll('#onlineList');
+  lists.forEach(list => {
+    const rows = list.querySelectorAll(`[data-pid="${CSS.escape(id)}"]`);
+    rows.forEach(row => row.remove());
+  });
+  
   ctx.registry.delete(id);
   updateUsersCounter();
   queueSbarUpdate();

@@ -54,9 +54,16 @@
     </div>
   </div>
 
-  <div class="footer">
-    <div class="foot-swipe" id="footSwipe">
-      <div class="foot-pane">
+         <div class="footer">
+           <!-- Мобильная карусель -->
+           <div class="foot-swipe" id="footSwipe">
+             <div class="foot-pane pane-connected">
+               <div class="list">
+                 <h3>Подключены</h3>
+                 <div id="onlineList" aria-live="polite"></div>
+               </div>
+             </div>
+             <div class="foot-pane pane-settings">
         <div class="footer-left">
           <div class="me-card">
             <div class="me-row">
@@ -79,7 +86,7 @@
           </div>
         </div>
       </div>
-      <div class="foot-pane">
+      <div class="foot-pane pane-chat">
         <div class="footer-right">
           <div class="chatbox">
             <div class="chat-log" id="chatLog" aria-live="polite"></div>

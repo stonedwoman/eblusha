@@ -111,7 +111,15 @@ export function createRowEl(identity, name){
   row.dataset.pid = identity;
   row.innerHTML=`<div class="avatar" style="background:${hashColor(name)}">${name.slice(0,1).toUpperCase()}</div><div class="name">${name}</div>`;
   row.onclick=()=>{ ctx.pinnedId = (ctx.pinnedId===identity? null : identity); };
-  byId('onlineList').appendChild(row);
+  
+  // Добавляем в оба списка (сайдбар для десктопа, карусель для мобильных)
+  const lists = document.querySelectorAll('#onlineList');
+  lists.forEach(list => {
+    const clonedRow = row.cloneNode(true);
+    clonedRow.onclick = () => { ctx.pinnedId = (ctx.pinnedId===identity? null : identity); };
+    list.appendChild(clonedRow);
+  });
+  
   return row;
 }
 

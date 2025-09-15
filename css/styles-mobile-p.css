@@ -11,9 +11,8 @@ html, body{
 
 #screen-app{
   grid-template-columns:1fr;
-  grid-template-rows:auto minmax(0,1fr) auto;
+  grid-template-rows:minmax(0,1fr) auto;
   grid-template-areas:
-    "sidebar"
     "stage"
     "footer";
   height:100dvh;
@@ -22,28 +21,14 @@ html, body{
   overflow:hidden;
   padding-bottom:env(safe-area-inset-bottom);
 }
+
+.sidebar{display:none !important}
 @supports not (height:100dvh){
   #screen-app{ height:calc(var(--vh, 1vh) * 100); }
 }
 
-.sidebar{grid-area:sidebar}
 .stage{grid-area:stage; padding-top:0; min-height:0; overflow:hidden}
 .topbar{padding:0; padding-bottom:10px; padding-left:10px}
-
-/* Онлайн-список */
-#onlineList{
-  display:grid;
-  grid-template-columns:repeat(2, minmax(0, 1fr));
-  gap:8px;
-}
-.user{
-  padding:8px;
-  border:1px solid var(--line);
-  background:var(--panel);
-  border-radius:12px;
-  gap:8px;
-}
-.user:hover{background:rgba(255,255,255,.03)}
 
 .tile .name{top:10px; bottom:unset}
 
@@ -93,6 +78,50 @@ html, body{
   min-width:0;
 }
 
+/* Порядок панелей - убираем CSS order, используем DOM порядок */
+.foot-pane.pane-connected { 
+  display:block !important; /* Явно показываем панель на мобильных */
+}
+
+.foot-pane:last-child{border-right:none}
+.footer-left{padding:0; border-right:none}
+.footer-right{padding:0}
+.chatbox{margin:0; height:100%}
+.chat-log{min-height:135px;}
+#btnShare{display:none !important}
+
+/* Список участников в карусели */
+.foot-pane.pane-connected .list{
+  margin:0;
+  padding:10px;
+  overflow:auto;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--panel);
+  min-height:200px;
+}
+.foot-pane.pane-connected .list h3{
+  margin:6px 6px 10px;
+  font-size:12px;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+#onlineList{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:8px;
+}
+.user{
+  padding:8px;
+  border:1px solid var(--line);
+  background:var(--panel);
+  border-radius:12px;
+  gap:8px;
+}
+.user:hover{background:rgba(255,255,255,.03)}
+
+/* Мобильная карусель */
 .foot-swipe{
   display:flex;
   width:100%;
@@ -125,18 +154,6 @@ html, body{
   overflow-y:hidden;
   overscroll-behavior-y:none;
 }
-
-/* Опционально: порядок, если DOM не переставлен JS-ом */
-.foot-pane.pane-connected{ order:1; }
-.foot-pane.pane-settings { order:2; }
-.foot-pane.pane-chat     { order:3; }
-
-.foot-pane:last-child{border-right:none}
-.footer-left{padding:0; border-right:none}
-.footer-right{padding:0}
-.chatbox{margin:0; height:100%}
-.chat-log{min-height:135px;}
-#btnShare{display:none !important}
 
 /* Пейджер */
 .foot-dots{

@@ -1,5 +1,6 @@
 // ===== Mobile Landscape layout (equal grid + footer carousel) =====
 import { ctx } from "../state.js";
+import { updateFootDotsActive, initFootDots } from "../ui-settings-ice-init.js";
 import { byId } from "../utils.js";
 import { createTileEl, tilesMain } from "../tiles.js";
 import { usersCounterText } from "../registry.js";
@@ -85,70 +86,35 @@ export function highlightSpeaking(ids){
 }
 
 /* ======================== ФУТЕР-КАРУСЕЛЬ (ландшафт) ====================== */
-let sidebarMounted = false;
-let sidebarPlaceholder = null;
+// Используем глобальные переменные для предотвращения повторной инициализации
+if (typeof window.footSwipeInitialized === 'undefined') {
+  window.footSwipeInitialized = false;
+}
 
-let footSwipeInitialized = false;
-let activePaneIdx = 1;
+// Минимальный логгер для отладки карусели
+const FS = (tag, data={})=> console.log('FS[l]', tag, data);
+
+// Восстанавливаем активную панель из sessionStorage (или из уже установленной window.activePaneIdx), по умолчанию 1
+let savedIdx = null; try { const raw = sessionStorage.getItem(STORAGE_KEY); savedIdx = raw!=null ? +raw : null; } catch {}
+const existingIdx = (typeof window.activePaneIdx === 'number') ? window.activePaneIdx : null;
+window.activePaneIdx = Number.isFinite(existingIdx) ? existingIdx : (Number.isFinite(savedIdx) ? savedIdx : 1);
+let activePaneIdx = window.activePaneIdx;
+FS('init', { profile:'landscape', savedIdx, active: activePaneIdx });
+
+console.log('Mobile Landscape: Initializing with global state:', {
+  footSwipeInitialized: window.footSwipeInitialized,
+  activePaneIdx: window.activePaneIdx,
+  localActivePaneIdx: activePaneIdx
+});
 let suppressDetect = false;
 let fsResizeObs = null;
 let fsScrollHandler = null;
 
-const STORAGE_KEY = 'footPaneIdx_v1';
+// STORAGE_KEY already declared above
 
 const getFootSwipe = () => qs('.foot-swipe');
 const getFootPanes = () => { const fs = getFootSwipe(); return fs ? qsa('.foot-pane', fs) : []; };
-const getSidebarPane = () => getFootSwipe()?.querySelector('.foot-pane.sidebar-pane') || null;
-const getNonSidebarPanes = () => getFootPanes().filter(p => p !== getSidebarPane());
-const getDots      = () => qsa('.foot-dots .fdot');
-const markDots = (idx)=> getDots().forEach((d,i)=> d.classList.toggle('active', i===idx));
-
-/* --- Поиск списка «Подключены» надёжнее --- */
-function getSidebar(){ return qs('.sidebar'); }
-/** Предпочитаем #onlineList, затем похожие классы, затем .list как фолбэк */
-function findOnlineList(){
-  const sb = getSidebar();
-  // строго внутри sidebar
-  let el = sb?.querySelector('#onlineList, .online-list') || null;
-  if (!el) el = sb?.querySelector('.list #onlineList, .list .online-list') || null;
-  if (!el) el = sb?.querySelector('#onlineList, .online-list, .list') || null;
-  // глобальный фолбэк (если уже вынесли из сайдбара или верстка другая)
-  if (!el) el = document.querySelector('#onlineList, .online-list');
-  return el || null;
-}
-
-/* --- если элемента ещё нет, ждём его появление и монтируем --- */
-let waitObs = null;
-function waitAndMountSidebarIfReady(){
-  if (sidebarMounted) return;
-  const fs = getFootSwipe();
-  const list = findOnlineList();
-  if (fs && list) { mountSidebarIntoFootSwipe(); return; }
-
-  if (waitObs) waitObs.disconnect();
-  waitObs = new MutationObserver(() => {
-    const fs2 = getFootSwipe();
-    const l2 = findOnlineList();
-    if (fs2 && l2){
-      waitObs.disconnect(); waitObs = null;
-      mountSidebarIntoFootSwipe();
-    }
-  });
-  waitObs.observe(document.body, { childList:true, subtree:true });
-}
-
-/* Панели «Настройки» и «Чат» */
-function getSettingsPane(){
-  const list = getNonSidebarPanes();
-  const byClass = list.find(p => p.querySelector('.me-card') || p.dataset.role === 'settings');
-  return byClass || list[0] || null;
-}
-function getChatPane(){
-  const list = getNonSidebarPanes();
-  const byClass = list.find(p => p.querySelector('.chatbox') || p.dataset.role === 'chat');
-  return byClass || list[1] || null;
-}
-const getPaneIndex = (p) => { const panes = getFootPanes(); return p ? panes.indexOf(p) : -1; };
+// dots handled centrally in ui-settings-ice-init.js via updateFootDotsActive()
 
 function loadSavedPaneIdx(){
   try{
@@ -157,11 +123,12 @@ function loadSavedPaneIdx(){
   }catch{ return null; }
 }
 function saveActivePaneIdx(){
-  try{ sessionStorage.setItem(STORAGE_KEY, String(activePaneIdx)); }catch{}
+  try{ sessionStorage.setItem(STORAGE_KEY, String(window.activePaneIdx)); }catch{}
 }
 
 export function scrollFootSwipeToPane(idx, behavior = 'instant'){
-  activePaneIdx = Math.max(0, Math.min(idx, getFootPanes().length - 1));
+  window.activePaneIdx = Math.max(0, Math.min(idx, getFootPanes().length - 1));
+  activePaneIdx = window.activePaneIdx;
   saveActivePaneIdx();
   alignToActivePane(behavior);
 }
@@ -169,16 +136,38 @@ function alignToActivePane(behavior = 'instant'){
   const fs = getFootSwipe(); const panes = getFootPanes();
   if (!fs || !panes.length) return;
 
+  // Wait until measurements are available
+  if (fs.clientWidth === 0 || panes.some(p => p.clientWidth === 0)){
+    FS('wait', { reason:'clientWidth=0' });
+    requestAnimationFrame(() => setTimeout(() => alignToActivePane(behavior), 30));
+    return;
+  }
+
   const target = panes[Math.max(0, Math.min(activePaneIdx, panes.length - 1))];
   if (!target) return;
 
-  const left = target.offsetLeft;
+  // Uniform panes: each pane is 100% of viewport width → compute deterministically
+  let left = Math.round(activePaneIdx * fs.clientWidth);
+  const measuredLeft = target.offsetLeft;
+  // If DOM measurement matches or is close, use it; otherwise use deterministic value
+  if (Number.isFinite(measuredLeft) && Math.abs(measuredLeft - left) <= 2) {
+    left = measuredLeft;
+  }
+  FS('align', { idx: activePaneIdx, measuredLeft, computedLeft:left, slBefore: fs.scrollLeft, vw: fs.clientWidth });
+  
   suppressDetect = true;
   try{ fs.scrollTo({ left, behavior }); }catch{ fs.scrollLeft = left; }
   requestAnimationFrame(()=> { try{ fs.scrollTo({ left, behavior:'instant' }); }catch{ fs.scrollLeft = left; }});
-  setTimeout(()=> { try{ fs.scrollTo({ left, behavior:'instant' }); }catch{ fs.scrollLeft = left; } suppressDetect = false; }, 80);
+  setTimeout(()=> { 
+    try{ fs.scrollTo({ left, behavior:'instant' }); }catch{ fs.scrollLeft = left; } 
+    suppressDetect = false; 
+    // persist current pane index after programmatic align
+    saveActivePaneIdx();
+    updateFootDotsActive();
+    FS('aligned', { idx: activePaneIdx, slAfter: fs.scrollLeft });
+  }, 80);
 
-  markDots(activePaneIdx);
+  updateFootDotsActive();
 }
 function detectActivePaneIdx(){
   const fs = getFootSwipe(); const panes = getFootPanes();
@@ -210,9 +199,14 @@ function attachFsScrollWatcher(){
     if (suppressDetect) return;
     if (t) return;
     t = setTimeout(()=>{
-      activePaneIdx = detectActivePaneIdx();
+      // simple index detection in landscape: pane width = viewport width
+      const fs = getFootSwipe();
+      if (fs && fs.clientWidth > 0){ window.activePaneIdx = Math.round(fs.scrollLeft / fs.clientWidth); }
+      else { window.activePaneIdx = detectActivePaneIdx(); }
+      activePaneIdx = window.activePaneIdx;
       saveActivePaneIdx();
-      markDots(activePaneIdx);
+      updateFootDotsActive();
+      FS('scroll->idx', { idx: activePaneIdx, sl: fs?.scrollLeft, vw: fs?.clientWidth });
       t = null;
     }, 100);
   };
@@ -238,122 +232,39 @@ function withPreservedFsScroll(fn, preserve = true){
   }
 }
 
-/* === МОНТАЖ «ПОДКЛЮЧЕНЫ» В КАРУСЕЛЬ === */
-function mountSidebarIntoFootSwipe(){
-  if (sidebarMounted && getSidebarPane()) return;
-
+/* === ИНИЦИАЛИЗАЦИЯ КАРУСЕЛИ (теперь сайдбар уже в HTML) === */
+function initFootSwipeCarousel(){
   const footSwipe = getFootSwipe();
-  const list = findOnlineList();
-  if (!footSwipe || !list) { waitAndMountSidebarIfReady(); return; }
-
-  // Если список уже в нужной панели — просто выровняем порядок
-  const existingPane = list.closest('.foot-pane.sidebar-pane');
-  if (existingPane && existingPane.parentElement === footSwipe){
-    sidebarMounted = true;
-    ensureFootSwipeOrder(false);
+  if (!footSwipe) return;
+  
+  // Если карусель уже инициализирована, просто выравниваем по активной панели
+  if (window.footSwipeInitialized) {
+    FS('reinit-align', { idx: activePaneIdx });
+    alignToActivePane('instant');
     return;
   }
 
-  // Создадим плейсхолдер, чтобы вернуть список обратно при выходе из мобайла
-  if (!sidebarPlaceholder){
-    sidebarPlaceholder = document.createElement('div');
-    sidebarPlaceholder.className = 'sidebar-placeholder';
-    if (list.parentElement) list.parentElement.insertBefore(sidebarPlaceholder, list);
-  }
+  const panes = getFootPanes();
+  FS('panes', { count: panes.length });
+  
+  const saved = loadSavedPaneIdx();
+  FS('saved', { saved });
+  if (saved != null){ window.activePaneIdx = saved; activePaneIdx = saved; }
 
-  // Панель «Подключены» (если её нет)
-  let pane = getSidebarPane();
-  if (!pane){
-    pane = document.createElement('div');
-    pane.className = 'foot-pane sidebar-pane';
-  } else {
-    pane.textContent = ''; // очистим, на случай старого содержимого
-  }
+  attachFsScrollWatcher();
+  alignToActivePane('instant');
 
-  // Обёртка и заголовок (заголовок скрыт)
-  const title = document.createElement('h3');
-  title.textContent = 'Подключены';
-  title.style.cssText = 'display:none';
+  if (fsResizeObs) fsResizeObs.disconnect();
+  fsResizeObs = new ResizeObserver(()=> alignToActivePane('instant'));
+  fsResizeObs.observe(footSwipe);
 
-  const wrapper = document.createElement('div');
-  wrapper.className = 'list';
-  wrapper.appendChild(list);
+  // ensure dots exist and reflect current pane count
+  try { initFootDots(); } catch {}
+  updateFootDotsActive();
 
-  pane.appendChild(title);
-  pane.appendChild(wrapper);
-
-  withPreservedFsScroll(()=> {
-    if (!pane.parentElement) footSwipe.insertBefore(pane, footSwipe.firstChild);
-  }, /*preserve*/ false);
-
-  sidebarMounted = true;
-  ensureFootSwipeOrder(false);
-
-  if (!footSwipeInitialized){
-    const saved = loadSavedPaneIdx();
-    if (saved != null){
-      activePaneIdx = saved;
-    } else {
-      const sIdx = getPaneIndex(getSettingsPane());
-      activePaneIdx = sIdx >= 0 ? sIdx : 1;
-    }
-    attachFsScrollWatcher();
-    alignToActivePane('instant');
-
-    if (fsResizeObs) fsResizeObs.disconnect();
-    fsResizeObs = new ResizeObserver(()=> alignToActivePane('instant'));
-    fsResizeObs.observe(footSwipe);
-
-    const dots = getDots();
-    if (dots.length){
-      dots.forEach((dot, i)=>{
-        on(dot, 'click', ()=> scrollFootSwipeToPane(i, 'smooth'));
-        on(dot, 'keydown', (e)=>{ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scrollFootSwipeToPane(i, 'smooth'); }});
-      });
-      markDots(activePaneIdx);
-    }
-
-    footSwipeInitialized = true;
-  } else {
-    alignToActivePane('instant');
-    markDots(activePaneIdx);
-  }
+  window.footSwipeInitialized = true;
 }
 
-function unmountSidebarFromFootSwipe(){
-  if (!sidebarMounted) return;
-
-  const pane = getSidebarPane();
-  // Берём сам список из панели (внутри wrapper.list)
-  const list = pane?.querySelector('.list > #onlineList, .list > .online-list, .list > .list') || pane?.querySelector('.list');
-  if (list && sidebarPlaceholder && sidebarPlaceholder.parentElement) {
-    sidebarPlaceholder.parentElement.replaceChild(list, sidebarPlaceholder);
-  }
-  pane?.remove();
-
-  sidebarMounted = false;
-  sidebarPlaceholder = null;
-
-  detachFsScrollWatcher();
-  if (fsResizeObs){ fsResizeObs.disconnect(); fsResizeObs = null; }
-
-  footSwipeInitialized = false;
-}
-
-function ensureFootSwipeOrder(preserve = true){
-  const fs = getFootSwipe();
-  if (!fs) return;
-
-  const sidebarPane  = getSidebarPane() || null;
-  const settingsPane = getSettingsPane();
-  const chatPane     = getChatPane();
-
-  withPreservedFsScroll(()=> {
-    if (sidebarPane)  fs.insertBefore(sidebarPane, fs.firstChild); // слева
-    if (settingsPane) fs.appendChild(settingsPane);                // середина
-    if (chatPane)     fs.appendChild(chatPane);                    // справа
-  }, preserve);
-}
 
 /* ================================ APPLY ================================== */
 export function applyLayout(){
@@ -384,9 +295,8 @@ export function applyLayout(){
   });
 
   applyEqualGrid();
-  // убеждаемся, что модуль «Подключены» смонтирован
-  mountSidebarIntoFootSwipe();
-  alignToActivePane('instant');
+  // инициализируем карусель
+  initFootSwipeCarousel();
   updateUsersCounter();
 }
 
@@ -394,17 +304,19 @@ export function applyLayout(){
 export function initLayout(){
   updateUsersCounter();
 
-  // Попробуем смонтировать сразу, иначе дождёмся появления узлов
-  mountSidebarIntoFootSwipe();
-  waitAndMountSidebarIfReady();
-
-  ensureFootSwipeOrder(true);
-  alignToActivePane('instant');
+  // Инициализируем карусель
+  initFootSwipeCarousel();
 
   // Пересчёты сетки
   on(window, 'resize', ()=> settleGrid(), { passive:true });
-  on(window, 'orientationchange', ()=> setTimeout(settleGrid, 60), { passive:true });
-
+  on(window, 'orientationchange', ()=> {
+    setTimeout(() => {
+      settleGrid();
+      // Сохраняем текущую панель перед сменой ориентации
+      saveActivePaneIdx();
+    }, 60);
+  }, { passive:true });
+  
   // Первый прогон
   applyLayout();
 }

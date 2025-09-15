@@ -42,7 +42,7 @@
     display: none;
   }
 
-  /* Panel width = 100% of carousel viewport */
+  /* Panel width = 100% of carousel viewport (one pane per view) */
   .foot-pane {
     scroll-snap-align: start;
     flex: 0 0 100%;
@@ -55,8 +55,13 @@
     border-right: none;
   }
 
+  /* Порядок панелей - убираем CSS order, используем DOM порядок */
+  .foot-pane.pane-connected { 
+    display:block !important; /* Явно показываем панель на мобильных */
+  }
+
   /* Sidebar panel styles */
-  .foot-pane.sidebar-pane .list {
+  .foot-pane.pane-connected .list {
     margin: 0;
     padding: 10px;
     overflow: auto;
@@ -64,6 +69,28 @@
     border-radius: var(--radius);
     background: var(--panel);
     min-height: 46vh;
+  }
+  .foot-pane.pane-connected .list h3 {
+    margin: 6px 6px 10px;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  #onlineList {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .user {
+    padding: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    border-radius: 12px;
+    gap: 8px;
+  }
+  .user:hover {
+    background: rgba(255, 255, 255, .03);
   }
 
   /* Show send button */

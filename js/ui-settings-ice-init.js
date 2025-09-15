@@ -262,6 +262,7 @@ export function stopPingLoop(){ if (pingTimer){ clearInterval(pingTimer); pingTi
 /* ===== Индикатор-«точки» для foot-swipe ===== */
 const footSwipe = byId("footSwipe");
 const footDots  = byId("footDots");
+const STORAGE_KEY = 'footPaneIdx_v1';
 
 export function initFootDots(){
   if (!footSwipe || !footDots) return;
@@ -274,14 +275,34 @@ export function initFootDots(){
   for (let i=0;i<panes;i++){
     const b=document.createElement("button");
     b.type="button"; b.className="fdot"; b.setAttribute("aria-label",`Панель ${i+1}`);
-    b.addEventListener("click", ()=> footSwipe.scrollTo({left: i * footSwipe.clientWidth, behavior:"smooth"}));
+    b.addEventListener("click", ()=>{
+      // синхронизируем глобальный индекс, затем прокручиваем
+      window.activePaneIdx = i;
+      try{ sessionStorage.setItem(STORAGE_KEY, String(i)); }catch{}
+      footSwipe.scrollTo({left: i * footSwipe.clientWidth, behavior:"smooth"});
+      updateFootDotsActive();
+    });
     footDots.appendChild(b);
   }
   updateFootDotsActive();
 }
 export function updateFootDotsActive(){
   if (!footSwipe || !footDots || footDots.children.length===0) return;
-  const idx = Math.round(footSwipe.scrollLeft / footSwipe.clientWidth);
+  let idx;
+  const panesEls = footSwipe.querySelectorAll('.foot-pane');
+  if (Number.isFinite(window.activePaneIdx)){
+    idx = Math.max(0, Math.min(window.activePaneIdx, panesEls.length-1));
+  } else {
+    // Fallback: вычисляем ближайшую панель к центру вьюпорта
+    const center = footSwipe.scrollLeft + footSwipe.clientWidth / 2;
+    let best = 0, bestDist = Infinity;
+    panesEls.forEach((p, i) => {
+      const L = p.offsetLeft, R = L + p.clientWidth;
+      const dist = center < L ? (L - center) : (center > R ? (center - R) : 0);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    });
+    idx = best;
+  }
   [...footDots.children].forEach((b,i)=>{
     b.classList.toggle("active", i===idx);
     b.setAttribute("aria-current", i===idx ? "true" : "false");

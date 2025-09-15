@@ -17,7 +17,7 @@ button,input,select,textarea{font:inherit}
 /* Auth */
 #screen-auth{display:grid; place-items:center; min-height:100vh; padding:32px}
 .auth-card{width:min(920px,100%); background:var(--bg2); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); display:grid; grid-template-columns:1.2fr 1fr}
-.auth-hero{padding:28px; border:1px solid var(--line); background:linear-gradient(140deg, rgba(88,101,242,.25), transparent 50%), radial-gradient(1000px 400px at 10% -10%, rgba(255,255,255,.06), transparent 60%)}
+.auth-hero{padding:28px; border-right:1px solid var(--line); border-top-left-radius: 10px; background:linear-gradient(140deg, rgba(88,101,242,.25), transparent 50%), radial-gradient(1000px 400px at 10% -10%, rgba(255,255,255,.06), transparent 60%)}
 .auth-hero h1{margin:0 0 8px}
 .auth-hero p{margin:0; color:var(--muted)}
 .auth-form{padding:28px}
@@ -150,6 +150,11 @@ body.no-scroll{overflow:hidden}
   .tile .name{font-size:.9em}
   .ctrl{font-size:1em}
   .vol{font-size:.9em}
+  
+  /* Скрываем панель "ПОДКЛЮЧЕНЫ" на десктопе - список уже в сайдбаре */
+  .foot-pane.pane-connected{
+    display:none;
+  }
 }
 
 /* Spotlight helpers */
