@@ -1,8 +1,8 @@
 // ===== Desktop layout (spotlight + rail) =====
-import { ctx } from "./state.js";
-import { byId } from "./utils.js";
-import { createTileEl, tilesMain, tilesRail } from "./tiles.js";
-import { usersCounterText } from "./registry.js";
+import { ctx } from "../state.js";
+import { byId } from "../utils.js";
+import { createTileEl, tilesMain, tilesRail } from "../tiles.js";
+import { usersCounterText } from "../registry.js";
 
 /* ----------------------------- Утилиты ----------------------------------- */
 const clamp = (v, a, b) => Math.min(Math.max(v, a), b);

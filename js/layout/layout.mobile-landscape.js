@@ -1,27 +1,20 @@
 // ===== Mobile Landscape layout (equal grid + footer carousel) =====
 import { ctx } from "../state.js";
-import { byId, isMobileLandscape } from "../utils.js";
+import { byId } from "../utils.js";
 import { createTileEl, tilesMain } from "../tiles.js";
 import { usersCounterText } from "../registry.js";
 
 /* ----------------------------- Утилиты ----------------------------------- */
-const on  = (el, ev, fn, opts) => el && el.addEventListener(ev, fn, opts);
-const qs  = (sel, root=document) => root.querySelector(sel);
+const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+const raf = (fn) => requestAnimationFrame(fn);
+const on = (el, ev, fn, opts) => el && el.addEventListener(ev, fn, opts);
+const qs = (sel, root=document) => root.querySelector(sel);
 const qsa = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
 /* ------------------------ Пользовательский счётчик ----------------------- */
 export function updateUsersCounter(){
   const tag = byId('usersTag');
   if (tag) tag.textContent = usersCounterText();
-}
-
-/* ------------------------- Подсветка говорящих --------------------------- */
-export function highlightSpeaking(ids){
-  const set = new Set(ids);
-  document.querySelectorAll('.tile').forEach(t=>t.classList.remove('speaking'));
-  set.forEach(id=>{
-    document.querySelector(`.tile[data-pid="${CSS.escape(id)}"]`)?.classList.add('speaking');
-  });
 }
 
 /* =================== Равномерная сетка с фиксированным 16:9 ============== */
@@ -76,11 +69,19 @@ function applyEqualGrid(){
     t.style.height = '';
   });
 }
-
 function settleGrid(){
   applyEqualGrid();
   requestAnimationFrame(applyEqualGrid);
   setTimeout(applyEqualGrid, 60);
+}
+
+/* Подсветка активных спикеров (общая фича) */
+export function highlightSpeaking(ids){
+  const set=new Set(ids);
+  document.querySelectorAll('.tile').forEach(t=>t.classList.remove('speaking'));
+  set.forEach(id=>{
+    document.querySelector(`.tile[data-pid="${CSS.escape(id)}"]`)?.classList.add('speaking');
+  });
 }
 
 /* ======================== ФУТЕР-КАРУСЕЛЬ (ландшафт) ====================== */
@@ -306,7 +307,7 @@ function mountSidebarIntoFootSwipe(){
     const dots = getDots();
     if (dots.length){
       dots.forEach((dot, i)=>{
-        on(dot, 'click',   ()=> scrollFootSwipeToPane(i, 'smooth'));
+        on(dot, 'click', ()=> scrollFootSwipeToPane(i, 'smooth'));
         on(dot, 'keydown', (e)=>{ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scrollFootSwipeToPane(i, 'smooth'); }});
       });
       markDots(activePaneIdx);
@@ -375,17 +376,6 @@ export function applyLayout(){
     }
   }
 
-  // Снимаем возможный grid от старых режимов
-  const m = tilesMain();
-  if (m){
-    m.style.display = '';
-    m.style.gridTemplateColumns = '';
-    m.style.gridAutoFlow = '';
-    m.style.alignContent = '';
-    m.style.justifyContent = '';
-    m.style.gap = '';
-  }
-
   tiles.classList.remove('spotlight','single');
   document.querySelectorAll('.tile').forEach(t=>{
     t.classList.remove('spotlight','thumb');
@@ -414,7 +404,7 @@ export function initLayout(){
   // Пересчёты сетки
   on(window, 'resize', ()=> settleGrid(), { passive:true });
   on(window, 'orientationchange', ()=> setTimeout(settleGrid, 60), { passive:true });
-  
+
   // Первый прогон
   applyLayout();
 }
