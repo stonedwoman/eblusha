@@ -80,12 +80,28 @@ const impl = {
 };
 
 // ===== экспортируем «обёртки», которые делегируют в текущую impl
-export function fitSpotlightSize (...a){ return impl.fitSpotlightSize(...a); }
-export function applyLayout      (...a){ return impl.applyLayout(...a); }
-export function queueSbarUpdate  (...a){ return impl.queueSbarUpdate(...a); }
-export function updateMobileScrollbar(...a){ return impl.updateMobileScrollbar(...a); }
-export function updateUsersCounter(...a){ return impl.updateUsersCounter(...a); }
-export function highlightSpeaking(...a){ return impl.highlightSpeaking(...a); }
+export function fitSpotlightSize (...a){ 
+  if (typeof impl.fitSpotlightSize === 'function') return impl.fitSpotlightSize(...a);
+  // fallback для случаев, когда модуль ещё не загрузился
+  try { window.dispatchEvent(new Event("resize")); } catch {}
+}
+export function applyLayout      (...a){ 
+  if (typeof impl.applyLayout === 'function') return impl.applyLayout(...a);
+  // fallback для случаев, когда модуль ещё не загрузился
+  try { window.dispatchEvent(new Event("resize")); } catch {}
+}
+export function queueSbarUpdate  (...a){ 
+  if (typeof impl.queueSbarUpdate === 'function') return impl.queueSbarUpdate(...a);
+}
+export function updateMobileScrollbar(...a){ 
+  if (typeof impl.updateMobileScrollbar === 'function') return impl.updateMobileScrollbar(...a);
+}
+export function updateUsersCounter(...a){ 
+  if (typeof impl.updateUsersCounter === 'function') return impl.updateUsersCounter(...a);
+}
+export function highlightSpeaking(...a){ 
+  if (typeof impl.highlightSpeaking === 'function') return impl.highlightSpeaking(...a);
+}
 
 // ===== глобальные алиасы (некоторые места зовут через globalThis)
 try {
@@ -115,17 +131,30 @@ function pickProfilePath(){
   }
 }
 
-(async () => {
+// Загружаем профиль сразу, не асинхронно
+let profileLoaded = false;
+function loadProfile() {
+  if (profileLoaded) return;
   try {
-    const mod = await import(pickProfilePath());
-    // В профильных файлах могут быть частичные реализации — аккуратно подменяем имеющиеся
-    [
-      "fitSpotlightSize", "applyLayout", "queueSbarUpdate",
-      "updateMobileScrollbar", "updateUsersCounter", "highlightSpeaking"
-    ].forEach(k => {
-      if (typeof mod[k] === "function") impl[k] = mod[k];
+    const profilePath = pickProfilePath();
+    // Используем динамический импорт, но ждём его завершения
+    import(profilePath).then(mod => {
+      // В профильных файлах могут быть частичные реализации — аккуратно подменяем имеющиеся
+      [
+        "fitSpotlightSize", "applyLayout", "queueSbarUpdate",
+        "updateMobileScrollbar", "updateUsersCounter", "highlightSpeaking"
+      ].forEach(k => {
+        if (typeof mod[k] === "function") impl[k] = mod[k];
+      });
+      profileLoaded = true;
+    }).catch(() => {
+      // если профиль не загрузился — остаёмся на дефолтных реализациях
+      profileLoaded = true;
     });
   } catch {
-    // если профиль не загрузился — остаёмся на дефолтных реализациях
+    profileLoaded = true;
   }
-})();
+}
+
+// Запускаем загрузку сразу
+loadProfile();

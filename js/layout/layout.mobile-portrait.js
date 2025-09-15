@@ -23,6 +23,13 @@ export function highlightSpeaking(ids){
   });
 }
 
+/* ------------------------- Спотлайт (заглушка для мобилки) ---------------- */
+export function fitSpotlightSize(){
+  // В мобильном портрете спотлайт не используется
+  // Просто пересчитываем мозаику
+  relayoutTilesIfMobile();
+}
+
 /* ===================== МОБИЛЬНЫЙ СКРОЛЛБАР ДЛЯ ПЛИТОК ==================== */
 const getSbar      = ()=> qs('.tiles-sbar');
 const getSbarTrack = ()=> qs('.tiles-sbar .track');

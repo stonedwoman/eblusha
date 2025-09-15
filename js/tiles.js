@@ -4,6 +4,17 @@ import { ctx, state } from "./state.js";
 import { byId, hashColor, isMobileView } from "./utils.js";
 import { fitSpotlightSize } from "./layout.js";
 
+// Безопасная обёртка для fitSpotlightSize
+function safeFitSpotlightSize() {
+  try {
+    if (typeof fitSpotlightSize === 'function') {
+      safeFitSpotlightSize();
+    }
+  } catch (e) {
+    console.warn('fitSpotlightSize not available:', e);
+  }
+}
+
 /* ===== DOM helpers ===== */
 export function tilesMain(){ return byId('tilesMain'); }
 export function tilesRail(){ return byId('tilesRail'); }
@@ -117,7 +128,7 @@ export function setTileAspectFromVideo(tile, videoEl){
   if (isMobileGrid()){
     requestLayout();
   } else if (tile.classList.contains('spotlight')) {
-    fitSpotlightSize();
+    safeFitSpotlightSize();
   }
 }
 
