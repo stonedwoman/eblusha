@@ -1,5 +1,7 @@
 /* ===== MOBILE LANDSCAPE (<=950px, touch) ===== */
 @media (max-width: 950px) and (hover: none) and (pointer: coarse) and (orientation: landscape) {
+  /* Жёсткая посадка экрана в ландшафте (Chromium mobile) */
+  html, body{ height:100%; overflow:hidden; overscroll-behavior:none; -webkit-text-size-adjust:100%; text-size-adjust:100%; touch-action:manipulation; }
   
   /* Grid layout: stage left, vertical footer panel right */
   #screen-app {
@@ -7,8 +9,10 @@
     grid-template-rows: 1fr;
     grid-template-areas: "stage footer";
     padding-right: 5px; /* прижимаем правую колонку к краю, оставляя тонкий отступ */
-    min-height: 100vh;
+    min-height: 100svh;
     height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
   }
   
   .stage {
