@@ -147,8 +147,8 @@ if (typeof window.footSwipeInitialized === 'undefined') {
   window.footSwipeInitialized = false;
 }
 
-// Минимальный логгер для карусели
-const FS = (tag, data={})=> console.log('FS[p]', tag, data);
+// Минимальный логгер для карусели (отключён в проде)
+const FS = ()=>{};
 
 // Восстанавливаем активную панель из sessionStorage, по умолчанию 1 (Настройки)
 const STORAGE_KEY = 'footPaneIdx_v1';
@@ -156,12 +156,6 @@ let savedIdx = null; try { const raw = sessionStorage.getItem(STORAGE_KEY); save
 window.activePaneIdx = Number.isFinite(savedIdx) ? savedIdx : 1;
 let activePaneIdx = window.activePaneIdx;
 FS('init', { profile:'portrait', savedIdx, active: activePaneIdx });
-
-console.log('Mobile Portrait: Initializing with global state:', {
-  footSwipeInitialized: window.footSwipeInitialized,
-  activePaneIdx: window.activePaneIdx,
-  localActivePaneIdx: activePaneIdx
-});
 let suppressDetect = false;
 let fsResizeObs = null;
 let fsScrollHandler = null;

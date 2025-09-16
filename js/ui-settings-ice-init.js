@@ -268,7 +268,8 @@ export function initFootDots(){
   if (!footSwipe || !footDots) return;
   const panes = footSwipe.querySelectorAll(".foot-pane").length;
   footDots.innerHTML = "";
-  const shouldShow = isMobileView() && panes > 1;
+  // Показываем точки всегда, если панелей больше одной (универсально для всех режимов)
+  const shouldShow = panes > 1;
   footDots.setAttribute("aria-hidden", shouldShow ? "false" : "true");
   footDots.style.display = shouldShow ? "flex" : "none";
   if (!shouldShow) return;

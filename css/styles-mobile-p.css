@@ -86,8 +86,8 @@ html, body{
 .foot-pane:last-child{border-right:none}
 .footer-left{padding:0; border-right:none}
 .footer-right{padding:0}
-.chatbox{margin:0; height:100%}
-.chat-log{min-height:135px;}
+.chatbox{margin:0; height:100%; display:grid; grid-template-rows:1fr auto; min-height:0; max-height:none}
+.chat-log{min-height:180px; max-height:none; overflow:auto}
 #btnShare{display:none !important}
 
 /* Список участников в карусели */

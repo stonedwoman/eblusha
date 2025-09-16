@@ -91,8 +91,8 @@ if (typeof window.footSwipeInitialized === 'undefined') {
   window.footSwipeInitialized = false;
 }
 
-// Минимальный логгер для отладки карусели
-const FS = (tag, data={})=> console.log('FS[l]', tag, data);
+// Минимальный логгер для отладки карусели (отключён в проде)
+const FS = ()=>{};
 
 // Восстанавливаем активную панель из sessionStorage (или из уже установленной window.activePaneIdx), по умолчанию 1
 let savedIdx = null; try { const raw = sessionStorage.getItem(STORAGE_KEY); savedIdx = raw!=null ? +raw : null; } catch {}
@@ -100,12 +100,6 @@ const existingIdx = (typeof window.activePaneIdx === 'number') ? window.activePa
 window.activePaneIdx = Number.isFinite(existingIdx) ? existingIdx : (Number.isFinite(savedIdx) ? savedIdx : 1);
 let activePaneIdx = window.activePaneIdx;
 FS('init', { profile:'landscape', savedIdx, active: activePaneIdx });
-
-console.log('Mobile Landscape: Initializing with global state:', {
-  footSwipeInitialized: window.footSwipeInitialized,
-  activePaneIdx: window.activePaneIdx,
-  localActivePaneIdx: activePaneIdx
-});
 let suppressDetect = false;
 let fsResizeObs = null;
 let fsScrollHandler = null;
