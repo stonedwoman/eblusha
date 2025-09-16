@@ -7,6 +7,7 @@ html, body{
   overflow:hidden;
   overscroll-behavior:none;
   -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
 }
 
 #screen-app{
@@ -89,6 +90,11 @@ html, body{
 .chatbox{margin:0; height:100%; display:grid; grid-template-rows:1fr auto; min-height:0; max-height:none}
 .chat-log{min-height:180px; max-height:none; overflow:auto}
 #btnShare{display:none !important}
+
+/* Prevent iOS zoom on inputs: ensure >=16px in portrait */
+input, select, textarea, button, .input{
+  font-size:16px !important;
+}
 
 /* Список участников в карусели */
 .foot-pane.pane-connected .list{
