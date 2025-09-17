@@ -6,7 +6,7 @@ import { sfx } from "./sfx.js";
 
 /* из следующих файлов (будут в следующей/последующих пачках) */
 import { registerParticipant, unregisterParticipant, markHasVideo, recomputeHasVideo } from "./registry.js";
-import { attachAudioTrack, attachVideoToTile, showAvatarInTile } from "./tiles.js";
+import { attachAudioTrack, attachVideoToTile, showAvatarInTile, dedupeTilesByPid } from "./tiles.js";
 import { applyLayout, highlightSpeaking } from "./layout.js";
 import { refreshControls } from "./controls.js";
 import { wireData } from "./chat-session.js";
@@ -20,12 +20,14 @@ export async function connectLiveKit(token){
   ctx.room.on(RoomEvent.ParticipantConnected,  (p)=>{
     registerParticipant(p);
     applyLayout();
+    dedupeTilesByPid();
     if(!p.isLocal) sfx('peer-join');
   });
 
   ctx.room.on(RoomEvent.ParticipantDisconnected,(p)=>{
     unregisterParticipant(p.identity);
     applyLayout();
+    dedupeTilesByPid();
     if(!p.isLocal) sfx('peer-leave');
   });
 
@@ -38,6 +40,14 @@ export async function connectLiveKit(token){
     if(track.kind==='audio'){
       attachAudioTrack(track, participant.identity);
     } else {
+      // защита от дублей: если этот track.sid уже привязан к другому участнику — не прикрепляем
+      try {
+        const sid = track?.sid || track?.mediaStreamTrack?.id;
+        if (sid){
+          const dup = document.querySelector(`.tile[data-vid="${CSS.escape(sid)}"]`);
+          if (dup){ return; }
+        }
+      } catch {}
       attachVideoToTile(track, id, participant.isLocal,
         pub.source===Track.Source.ScreenShare ? 'Экран' : undefined);
       markHasVideo(participant.identity, true);
@@ -64,6 +74,7 @@ export async function connectLiveKit(token){
       }
     }
     applyLayout();
+    dedupeTilesByPid();
   });
 
   ctx.room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant)=>{
@@ -75,6 +86,7 @@ export async function connectLiveKit(token){
     }
     (track.detach?.()||[]).forEach(el=>el.remove());
     applyLayout();
+    dedupeTilesByPid();
   });
 
   ctx.room.on(RoomEvent.TrackMuted,  (pub,p)=>{
@@ -84,6 +96,7 @@ export async function connectLiveKit(token){
       markHasVideo(p.identity, false);
       refreshControls();
       applyLayout();
+      dedupeTilesByPid();
     }
   });
 
@@ -94,6 +107,7 @@ export async function connectLiveKit(token){
       markHasVideo(p.identity, true);
       refreshControls();
       applyLayout();
+      dedupeTilesByPid();
     }
   });
 
@@ -134,6 +148,7 @@ export async function connectLiveKit(token){
 
   // Гидратация уже подписанных треков (если подключились к существующей сессии)
   try {
+    const hydrated = new Set(); // track sid/id, чтобы не дублировать
     const enumerateVideoPubs = (p)=>{
       const out = [];
       try {
@@ -161,12 +176,19 @@ export async function connectLiveKit(token){
             pub.setSubscribed(true);
           }
         } catch {}
+        // публикации должны принадлежать именно этому участнику
+        const ownerId = pub?.participant?.identity || pub?.ownerIdentity || p?.identity;
+        if (ownerId && p?.identity && ownerId !== p.identity) return;
+
         const track = pub?.track;
         if (!track) return;
+        const sid = track?.sid || pub?.trackSid || pub?.sid || track?.mediaStreamTrack?.id;
+        if (sid && hydrated.has(sid)) return; // уже прикрепили где-то
         const isScreen = (pub?.source===Track.Source.ScreenShare || pub?.source===Track.Source.ScreenShareAudio);
         const id = p.identity + (isScreen ? '#screen' : '');
         attachVideoToTile(track, id, !!p.isLocal, (isScreen ? 'Экран' : undefined));
         markHasVideo(p.identity, true);
+        if (sid) hydrated.add(sid);
       });
     };
 
@@ -183,6 +205,7 @@ export async function connectLiveKit(token){
 
   await ensureMicOn();
   applyLayout();
+  dedupeTilesByPid();
   refreshControls();
 
   startPingLoop();

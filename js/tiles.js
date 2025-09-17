@@ -173,6 +173,28 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
   const curV  = tile.querySelector('video');
   const curId = tile.dataset.vid || '';
 
+  // защита от дублей по одному и тому же реальному треку
+  if (curV && curId && newId && curId === newId){
+    // уже прикреплён этот же медиатрек — просто обновим параметры
+    curV.muted = !!isLocal;
+    if (isLocal && !identity.includes('#screen')) applyCamTransformsTo(curV);
+    setTileAspectFromVideo(tile, curV);
+    return;
+  }
+
+  // если этот же реальный медиатрек уже отображается в ДРУГОЙ плитке — отключим его там
+  if (newId){
+    const dup = document.querySelector(`.tile[data-vid="${CSS.escape(newId)}"]`);
+    if (dup && dup !== tile){
+      const dupPid = dup.getAttribute('data-pid');
+      try { showAvatarInTile(dupPid); } catch {
+        const vprev = dup.querySelector('video');
+        if (vprev) safeRemoveVideo(vprev);
+        dup.dataset.vid=''; delete dup.dataset.ar;
+      }
+    }
+  }
+
   if (curV && curId && curId === newId){
     curV.muted = !!isLocal;
     if (isLocal && !identity.includes('#screen')) applyCamTransformsTo(curV);
@@ -770,4 +792,29 @@ export function relayoutTilesIfMobile(){
 // Принудительный пересчёт мозаики (используется десктоп-профилем)
 export function relayoutTilesForce(){
   layoutUniformGrid();
+}
+
+/* ===== Дедупликация тайлов по data-pid (предпочитаем тайл с видео) ===== */
+export function dedupeTilesByPid(){
+  const tiles = Array.from(document.querySelectorAll('.tile'));
+  const byPid = new Map();
+  const toRemove = [];
+  const hasVid = (t)=> !!t.querySelector('video');
+  for (const t of tiles){
+    const pid = t.getAttribute('data-pid');
+    if (!pid) continue;
+    const cur = byPid.get(pid);
+    if (!cur){ byPid.set(pid, t); continue; }
+    // если текущий имеет видео, а сохранённый нет — меняем победителя
+    if (hasVid(t) && !hasVid(cur)){
+      toRemove.push(cur);
+      byPid.set(pid, t);
+    } else {
+      toRemove.push(t);
+    }
+  }
+  toRemove.forEach(t=>{
+    const v=t.querySelector('video'); if (v) safeRemoveVideo(v);
+    try { t.remove(); } catch {}
+  });
 }
