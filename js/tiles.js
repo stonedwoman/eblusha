@@ -8,7 +8,7 @@ import { fitSpotlightSize } from "./layout.js";
 function safeFitSpotlightSize() {
   try {
     if (typeof fitSpotlightSize === 'function') {
-      safeFitSpotlightSize();
+      fitSpotlightSize();
     }
   } catch (e) {
     console.warn('fitSpotlightSize not available:', e);
@@ -323,61 +323,77 @@ function layoutUniformGrid(){
 
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
 
-  const cellAR = pickCellAR(tiles);
+  // ==== Justified mosaic: 1..3 rows, per-tile AR = 16:9 or 9:16, same row height ====
 
-  // подберём число колонок (1..N): при размещении элементами-«юнитами»
-  // (обычная плитка = 1 юнит, видео = round(AR_video/cellAR) юнитов)
+  // Вычисляем желаемый AR для каждого тайла: 16:9 (>=1) или 9:16 (<1)
+  const desiredAR = tiles.map(t=>{
+    const ar = getVideoAR(t);
+    if (ar && isFinite(ar)) return ar >= 1 ? (16/9) : (9/16);
+    // нет видео — по умолчанию ландшафт
+    return 16/9;
+  });
+
+  // Кандидаты по числу рядов (1..3 или до N)
+  const maxRows = Math.min(3, Math.max(1, N));
   let best = null;
 
-  function packAndMeasure(cols){
-    const cw = (W - gap*(cols-1)) / cols;
-    if (cw <= 0) return null;
-    const ch = cw / cellAR;
+  function measureForRows(rowsCount){
+    if (rowsCount < 1) return null;
+    const hBase = (H - gap * (rowsCount - 1)) / rowsCount;
+    if (!(hBase > 0)) return null;
 
-    // превратим список тайлов в юниты
-    const items = tiles.map(el=>{
-      if (hasVideo(el)){
-        let ar = getVideoAR(el);
-        if (!(ar>0 && isFinite(ar))) ar = cellAR; // на всякий
-        let span = Math.max(1, Math.round(ar / cellAR));
-        span = Math.min(span, cols); // не больше строки
-        return { el, type:'vid', span, ar };
-      } else {
-        return { el, type:'ph', span:1, ar:cellAR };
-      }
-    });
-
-    // грид по строкам
+    let idx = 0;
     const rows = [];
-    let row = [], used = 0;
-    for (const it of items){
-      if (used + it.span > cols){
-        if (row.length) rows.push(row);
-        row = [it]; used = it.span;
-      } else {
-        row.push(it); used += it.span;
+    let totalH = 0;
+
+    for (let r = 0; r < rowsCount; r++){
+      // Набираем ряд до переполнения ширины
+      let sumW = 0;
+      const start = idx;
+      while (idx < N){
+        sumW += desiredAR[idx] * hBase;
+        const itemsInRow = idx - start + 1;
+        const needed = sumW + gap * (itemsInRow - 1);
+        if (needed >= W) { break; }
+        idx++;
       }
+      // Гарантируем минимум один элемент в ряду
+      if (idx === start) idx++;
+
+      const end = Math.min(idx, N-1);
+      const rowIdxs = [];
+      for (let k=start; k<=end; k++) rowIdxs.push(k);
+
+      // Пересчёт точной высоты ряда, чтобы заполнить ширину (justified)
+      const sumAR = rowIdxs.reduce((s,i)=> s + desiredAR[i], 0);
+      const hRow = (W - gap * (rowIdxs.length - 1)) / (sumAR || (16/9));
+
+      rows.push({ idxs: rowIdxs, h: Math.max(1, hRow) });
+      totalH += hRow;
+      if (r < rowsCount - 1) totalH += gap;
+
+      idx = end + 1;
+      if (idx >= N) break;
     }
-    if (row.length) rows.push(row);
 
-    const totalH = rows.length * ch + gap*(rows.length-1);
-
-    // метрика: 1) не превышать высоту, 2) ближе к H, 3) меньше «пустых» ячеек
-    const fits = totalH <= H;
-    let blanks = 0;
-    for (const r of rows){
-      const sum = r.reduce((s,x)=>s+x.span,0);
-      blanks += Math.max(0, cols - sum);
+    // Если есть ещё элементы, добавим дополнительный ряд (как штраф — превысим rowsCount)
+    while (idx < N){
+      const start = idx;
+      let sumAR = 0, count = 0;
+      while (idx < N){ sumAR += desiredAR[idx]; idx++; count++; if (count >= Math.ceil(N/rowsCount)) break; }
+      const hRow = (W - gap * (count - 1)) / (sumAR || (16/9));
+      rows.push({ idxs: Array.from({length:count}, (_,j)=> start+j), h: Math.max(1, hRow) });
+      totalH += gap + hRow;
     }
-    const score = (fits?0:10000) + Math.abs(H-totalH) + blanks*5;
 
-    return { cols, cw, ch, rows, totalH, blanks, score };
+    const fits = totalH <= H + 0.5; // допускаем подгонку в пределах пиксела
+    const score = (fits?0:10000) + Math.abs(H - totalH);
+    return { rows, totalH, score };
   }
 
-  for (let cols=1; cols<=N; cols++){
-    const cand = packAndMeasure(cols);
-    if (!cand) continue;
-    if (!best || cand.score < best.score) best = cand;
+  for (let r=1; r<=maxRows; r++){
+    const cand = measureForRows(r);
+    if (!best || (cand && cand.score < best.score)) best = cand;
   }
   if (!best){ clearGrid(); return; }
 
@@ -386,28 +402,41 @@ function layoutUniformGrid(){
   m.classList.add('grid-active');
 
   const px = (v)=> Math.round(v) + 'px';
-  const { cols, cw, ch, rows } = best;
 
   let y = 0;
-  for (const r of rows){
+  let tileIndexPlaced = 0;
+  for (const row of best.rows){
+    const h = row.h;
     let x = 0;
-    for (const it of r){
-      const el = it.el;
-      const w = it.span * cw + gap * (it.span - 1);
+    const rowTiles = row.idxs.map(i => tiles[i]).filter(Boolean);
+    const rowARs   = row.idxs.map(i => desiredAR[i]);
+    const sumAR    = rowARs.reduce((s,a)=> s+a, 0) || (16/9);
+    // первичные ширины до округления
+    let widths = rowARs.map(a => a * h);
+    const totalGaps = gap * (rowTiles.length - 1);
+    const scale = (W - totalGaps) / widths.reduce((s,w)=> s+w, 0);
+    widths = widths.map(w => w * scale);
+
+    // исправим накопленную погрешность округления на последнем элементе
+    let acc = 0;
+    for (let i=0; i<rowTiles.length; i++){
+      const isLast = (i === rowTiles.length - 1);
+      const w = isLast ? (W - totalGaps - acc) : Math.round(widths[i]);
+      const el = rowTiles[i];
 
       el.style.boxSizing = 'border-box';
       el.style.position = 'absolute';
       el.style.left = px(x);
       el.style.top  = px(y);
-
-      // перебиваем возможные !important
       el.style.setProperty('width',  px(w), 'important');
-      el.style.setProperty('height', px(ch), 'important');
+      el.style.setProperty('height', px(Math.round(h)), 'important');
+      el.style.aspectRatio = '';
 
-      el.style.aspectRatio = ''; // держим размер по width/height
       x += w + gap;
+      acc += isLast ? 0 : Math.round(widths[i]);
+      tileIndexPlaced++;
     }
-    y += ch + gap;
+    y += Math.round(h) + gap;
   }
 
   m.style.height = px(y - gap);
