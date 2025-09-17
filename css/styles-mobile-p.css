@@ -28,7 +28,7 @@ html, body{
   #screen-app{ height:calc(var(--vh, 1vh) * 100); }
 }
 
-.stage{grid-area:stage; padding-top:0; min-height:0; overflow:hidden}
+.stage{grid-area:stage; padding-top:10px; padding-bottom: 0; min-height:0; overflow:hidden}
 .topbar{padding:0; padding-bottom:10px; padding-left:10px}
 
 .tile .name{top:10px; bottom:unset}
@@ -67,6 +67,13 @@ html, body{
 .tile .controls{display:none !important}
 /* было: object-fit: cover; */
 .tile video { width:100%; height:100%; object-fit: contain; object-position:center; }
+
+/* В мозаике (мобильной) сохраняем AR внутри одинаковых ячеек */
+.tiles-main.grid-active .tile video,
+.tiles-main.grid-active .tile .media{
+  object-fit: contain !important;
+  object-position: center;
+}
 
 /* Кастомный скроллбар плиток — в портретной мозаике скрыт */
 .tiles-sbar{ display:none !important }

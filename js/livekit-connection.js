@@ -54,6 +54,13 @@ export async function connectLiveKit(token){
           recomputeHasVideo(participant.identity);
           applyLayout();
         });
+        media.addEventListener('unmute', ()=>{
+          // повторно прикрепляем к тайлу без смены трека
+          attachVideoToTile(track, id, participant.isLocal,
+            pub.source===Track.Source.ScreenShare ? 'Экран' : undefined);
+          markHasVideo(participant.identity, true);
+          applyLayout();
+        });
       }
     }
     applyLayout();
@@ -71,20 +78,20 @@ export async function connectLiveKit(token){
   });
 
   ctx.room.on(RoomEvent.TrackMuted,  (pub,p)=>{
-    if(!p?.isLocal) return;
     if(pub?.source===Track.Source.Microphone){ refreshControls(); }
     if(pub?.source===Track.Source.Camera){
       showAvatarInTile(p.identity);
+      markHasVideo(p.identity, false);
       refreshControls();
       applyLayout();
     }
   });
 
   ctx.room.on(RoomEvent.TrackUnmuted,(pub,p)=>{
-    if(!p?.isLocal) return;
     if(pub?.source===Track.Source.Microphone){ refreshControls(); }
     if(pub?.source===Track.Source.Camera){
-      if(pub?.track) attachVideoToTile(pub.track, p.identity, true);
+      if(pub?.track) attachVideoToTile(pub.track, p.identity, !!p?.isLocal);
+      markHasVideo(p.identity, true);
       refreshControls();
       applyLayout();
     }

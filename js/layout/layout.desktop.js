@@ -38,13 +38,28 @@ export function fitSpotlightSize(){
   if (!tile || !main) return;
 
   const box = main.getBoundingClientRect();
-  const ar  = tile.classList.contains('portrait') ? (9/16) : (16/9);
+  // Вычисляем AR из самого видео, fallback к классам
+  const v = tile.querySelector('video');
+  let ar = 16/9;
+  if (v && v.videoWidth > 0 && v.videoHeight > 0){ ar = v.videoWidth / v.videoHeight; }
+  else if (tile.classList.contains('portrait')) ar = 9/16;
 
   let w = box.width, h = w / ar;
   if (h > box.height){ h = box.height; w = h * ar; }
 
   tile.style.width  = Math.floor(w) + 'px';
   tile.style.height = Math.floor(h) + 'px';
+  // Центрирование через margin-auto
+  tile.style.margin = 'auto';
+
+  // если при смене AR видео поменялось — дергаем ещё раз в следующий кадр
+  requestAnimationFrame(()=>{
+    const v2 = tile.querySelector('video');
+    if (v2 && v2.videoWidth>0 && v2.videoHeight>0){
+      const ar2 = v2.videoWidth / v2.videoHeight;
+      if (Math.abs(ar2 - ar) > 0.001) fitSpotlightSize();
+    }
+  });
 }
 
 /* Подсветка активных спикеров (общая фича) */

@@ -317,6 +317,8 @@ body.no-scroll {
 
 .tiles.spotlight .tiles-main {
   grid-column: 1;
+  place-items: center;           /* центрируем тайл по горизонтали/вертикали */
+  align-content: center;
 }
 
 .tiles-rail {
@@ -388,6 +390,13 @@ body.no-scroll {
   max-width: 100%;
   max-height: 100%;
   object-fit: cover;
+}
+
+/* Spotlight: всегда центр и contain */
+.tile.spotlight video,
+.tile.spotlight .media {
+  object-fit: contain !important;
+  object-position: center center !important;
 }
 
 .tile .placeholder {
@@ -684,6 +693,8 @@ body.no-scroll {
   position: static;
 }
 
+/* Preserve AR in mobile mosaic (uniform cell layout from tiles.js) */
+
 /* ===== MODAL (SETTINGS) ===== */
 .modal {
   position: fixed;
@@ -782,6 +793,11 @@ body.no-scroll {
   .tiles-main {
     place-items: stretch;
     align-content: start;
+  }
+  /* в режиме спотлайта центрируем */
+  .tiles.spotlight .tiles-main {
+    place-items: center;
+    align-content: center;
   }
   
   .tile {

@@ -2,7 +2,8 @@
 // но видео-тайлы растягиваются по своему AR на кратное число колонок.
 import { ctx, state } from "./state.js";
 import { byId, hashColor, isMobileView } from "./utils.js";
-import { fitSpotlightSize } from "./layout.js";
+import { fitSpotlightSize, applyLayout } from "./layout.js";
+import { markHasVideo, recomputeHasVideo } from "./registry.js";
 
 // Безопасная обёртка для fitSpotlightSize
 function safeFitSpotlightSize() {
@@ -133,8 +134,12 @@ export function setTileAspectFromVideo(tile, videoEl){
   tile.dataset.ar = (w>0 && h>0) ? (w/h).toFixed(6) : '';
   tile.dataset.vid = '1'; // пометка «есть видео»
 
-  if (isMobileGrid()){
-    requestLayout();
+  // гарантируем нахождение тайла в основном контейнере
+  const m = tilesMain(); if (m && tile.parentElement !== m) m.appendChild(tile);
+
+  if (isMobileView()){
+    layoutUniformGrid();
+    setTimeout(()=>{ if (isMobileView()) layoutUniformGrid(); }, 60);
   } else if (tile.classList.contains('spotlight')) {
     safeFitSpotlightSize();
   }
@@ -198,7 +203,21 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
   v.addEventListener('resize', tryApply);
   tryApply();
 
-  requestLayout();
+  // Форсируем пересчёт: сразу и через небольшой таймаут.
+  // Для чужого видео также возвращаем тайл из оверлея/списков в основную мозаику.
+  const m = tilesMain(); if (m && tile.parentElement !== m) m.appendChild(tile);
+  // Отметим наличие видео у базового участника (без #screen)
+  try { markHasVideo(identity.replace('#screen',''), true); } catch {}
+  // Переобновим флаг по DOM, если track уже отрисовался
+  setTimeout(()=>{ try { recomputeHasVideo(identity.replace('#screen','')); } catch {} }, 30);
+  // Дёргаем общий слой раскладки, чтобы профили (desktop/mobile) точно переосмыслили режим
+  try { applyLayout(); } catch {}
+  if (isMobileGrid() || isMobileView()){
+    layoutUniformGrid();
+    setTimeout(()=> layoutUniformGrid(), 60);
+  } else {
+    requestLayout();
+  }
 }
 
 export function ensureTile(identity, name, isLocal){
@@ -218,6 +237,7 @@ export function showAvatarInTile(identity){
   if (v) safeRemoveVideo(v);
   t.dataset.vid = '';
   delete t.dataset.ar;
+  try { markHasVideo(identity.replace('#screen',''), false); } catch {}
   if(!t.querySelector('.placeholder')){
     const ph=document.createElement('div');
     ph.className='placeholder';
@@ -225,7 +245,13 @@ export function showAvatarInTile(identity){
     t.prepend(ph);
   }
   if (t.classList.contains('spotlight')) fitSpotlightSize();
-  requestLayout();
+  try { applyLayout(); } catch {}
+  if (isMobileGrid()){
+    layoutUniformGrid();
+    setTimeout(()=>{ if (isMobileGrid()) layoutUniformGrid(); }, 50);
+  } else {
+    requestLayout();
+  }
 }
 
 export function attachAudioTrack(track, baseId){
@@ -323,123 +349,220 @@ function layoutUniformGrid(){
 
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
 
-  // ==== Justified mosaic: 1..3 rows, per-tile AR = 16:9 or 9:16, same row height ====
+  // ==== Variant B: split video (80%) vs no-video (20%), videos keep native AR ====
 
-  // Вычисляем желаемый AR для каждого тайла: 16:9 (>=1) или 9:16 (<1)
-  const desiredAR = tiles.map(t=>{
-    const ar = getVideoAR(t);
-    if (ar && isFinite(ar)) return ar >= 1 ? (16/9) : (9/16);
-    // нет видео — по умолчанию ландшафт
-    return 16/9;
-  });
-
-  // Кандидаты по числу рядов (1..3 или до N)
-  const maxRows = Math.min(3, Math.max(1, N));
-  let best = null;
-
-  function measureForRows(rowsCount){
-    if (rowsCount < 1) return null;
-    const hBase = (H - gap * (rowsCount - 1)) / rowsCount;
-    if (!(hBase > 0)) return null;
-
-    let idx = 0;
-    const rows = [];
-    let totalH = 0;
-
-    for (let r = 0; r < rowsCount; r++){
-      // Набираем ряд до переполнения ширины
-      let sumW = 0;
-      const start = idx;
-      while (idx < N){
-        sumW += desiredAR[idx] * hBase;
-        const itemsInRow = idx - start + 1;
-        const needed = sumW + gap * (itemsInRow - 1);
-        if (needed >= W) { break; }
-        idx++;
-      }
-      // Гарантируем минимум один элемент в ряду
-      if (idx === start) idx++;
-
-      const end = Math.min(idx, N-1);
-      const rowIdxs = [];
-      for (let k=start; k<=end; k++) rowIdxs.push(k);
-
-      // Пересчёт точной высоты ряда, чтобы заполнить ширину (justified)
-      const sumAR = rowIdxs.reduce((s,i)=> s + desiredAR[i], 0);
-      const hRow = (W - gap * (rowIdxs.length - 1)) / (sumAR || (16/9));
-
-      rows.push({ idxs: rowIdxs, h: Math.max(1, hRow) });
-      totalH += hRow;
-      if (r < rowsCount - 1) totalH += gap;
-
-      idx = end + 1;
-      if (idx >= N) break;
-    }
-
-    // Если есть ещё элементы, добавим дополнительный ряд (как штраф — превысим rowsCount)
-    while (idx < N){
-      const start = idx;
-      let sumAR = 0, count = 0;
-      while (idx < N){ sumAR += desiredAR[idx]; idx++; count++; if (count >= Math.ceil(N/rowsCount)) break; }
-      const hRow = (W - gap * (count - 1)) / (sumAR || (16/9));
-      rows.push({ idxs: Array.from({length:count}, (_,j)=> start+j), h: Math.max(1, hRow) });
-      totalH += gap + hRow;
-    }
-
-    const fits = totalH <= H + 0.5; // допускаем подгонку в пределах пиксела
-    const score = (fits?0:10000) + Math.abs(H - totalH);
-    return { rows, totalH, score };
-  }
-
-  for (let r=1; r<=maxRows; r++){
-    const cand = measureForRows(r);
-    if (!best || (cand && cand.score < best.score)) best = cand;
-  }
-  if (!best){ clearGrid(); return; }
-
-  // раскладываем
-  m.style.position = 'relative';
-  m.classList.add('grid-active');
+  const allTiles = tiles;
+  const videoTiles = allTiles.filter(t=> hasVideo(t));
+  const noVideoTiles = allTiles.filter(t=> !hasVideo(t));
 
   const px = (v)=> Math.round(v) + 'px';
 
-  let y = 0;
-  let tileIndexPlaced = 0;
-  for (const row of best.rows){
-    const h = row.h;
-    let x = 0;
-    const rowTiles = row.idxs.map(i => tiles[i]).filter(Boolean);
-    const rowARs   = row.idxs.map(i => desiredAR[i]);
-    const sumAR    = rowARs.reduce((s,a)=> s+a, 0) || (16/9);
-    // первичные ширины до округления
-    let widths = rowARs.map(a => a * h);
-    const totalGaps = gap * (rowTiles.length - 1);
-    const scale = (W - totalGaps) / widths.reduce((s,w)=> s+w, 0);
-    widths = widths.map(w => w * scale);
-
-    // исправим накопленную погрешность округления на последнем элементе
-    let acc = 0;
-    for (let i=0; i<rowTiles.length; i++){
-      const isLast = (i === rowTiles.length - 1);
-      const w = isLast ? (W - totalGaps - acc) : Math.round(widths[i]);
-      const el = rowTiles[i];
-
-      el.style.boxSizing = 'border-box';
-      el.style.position = 'absolute';
-      el.style.left = px(x);
-      el.style.top  = px(y);
-      el.style.setProperty('width',  px(w), 'important');
-      el.style.setProperty('height', px(Math.round(h)), 'important');
-      el.style.aspectRatio = '';
-
-      x += w + gap;
-      acc += isLast ? 0 : Math.round(widths[i]);
-      tileIndexPlaced++;
+  // Helpers: place equal grid in rect
+  function layoutEqualGrid(rect, items, opts){
+    const forceSquare = !!(opts && opts.forceSquare);
+    const n = items.length; if (!n) return;
+    const { x, y, w:RW, h:RH } = rect;
+    let best=null;
+    for (let cols=1; cols<=n; cols++){
+      const rows = Math.ceil(n/cols);
+      let cw = Math.floor((RW - gap*(cols-1)) / cols);
+      let ch = Math.floor((RH - gap*(rows-1)) / rows);
+      if (cw<=0 || ch<=0) continue;
+      if (forceSquare){
+        const s = Math.min(cw, ch);
+        cw = ch = s;
+      }
+      const area = cw*ch; if (!best || area>best.area) best={cols,rows,cw,ch,area};
     }
-    y += Math.round(h) + gap;
+    if (!best) return;
+    const offX = x + Math.max(0, Math.floor((RW - (best.cols*best.cw + gap*(best.cols-1))) / 2));
+    const offY = y + Math.max(0, Math.floor((RH - (best.rows*best.ch + gap*(best.rows-1))) / 2));
+    let i=0;
+    for (let r=0;r<best.rows;r++){
+      for (let c=0;c<best.cols;c++){
+        const el = items[i++]; if (!el) break;
+        const left = offX + c*(best.cw+gap);
+        const top  = offY + r*(best.ch+gap);
+        el.style.boxSizing='border-box';
+        el.style.position='absolute';
+        el.style.left = px(left);
+        el.style.top  = px(top);
+        el.style.setProperty('width',  px(best.cw), 'important');
+        el.style.setProperty('height', px(best.ch), 'important');
+        el.style.aspectRatio='';
+      }
+    }
   }
 
-  m.style.height = px(y - gap);
+  // Helpers: video mosaic with native AR in rect (1..3 rows)
+  function layoutVideoMosaic(rect, items){
+    const n = items.length; if (!n) return;
+    const { x, y, w:RW, h:RH } = rect;
+    const desiredAR = items.map(getVideoAR).map(ar=> (ar && isFinite(ar))? ar : 16/9);
+    const maxRows = Math.min(3, Math.max(1, n));
+    let placed = 0;
+
+    // Если в LANDSCAPE большинство видео портретные — удобнее колоночная укладка
+    const isLandscape = matchMedia('(orientation: landscape)').matches;
+    const portraitShare = desiredAR.filter(a=> a < 1).length / desiredAR.length;
+    if (isLandscape && portraitShare > 0.5){
+      // Колонки одинаковой ширины. Подберём число колонок и ширину так,
+      // чтобы каждая колонка точно помещалась по высоте RH.
+      let bestCol = null;
+      for (let cols=1; cols<=Math.min(3, n); cols++){
+        // чередуем элементы по колонкам (round-robin)
+        const colIdxs = Array.from({length: cols}, ()=> []);
+        for (let i=0; i<n; i++) colIdxs[i % cols].push(i);
+
+        // лимит ширины по горизонтали
+        const cwByWidth = Math.floor((RW - gap*(cols-1)) / cols);
+        if (!(cwByWidth>0)) continue;
+
+        // лимит ширины из высоты каждой колонки: sum(h_i) + gaps <= RH,
+        // где h_i = cw/ar_i => cw <= (RH - gaps) / sum(1/ar_i)
+        let cwByHeight = Infinity;
+        for (const list of colIdxs){
+          const invSum = list.reduce((s,i)=> s + (1/(desiredAR[i]|| (16/9))), 0);
+          const gaps = gap * Math.max(0, list.length - 1);
+          const limit = Math.floor((RH - gaps) / Math.max(0.0001, invSum));
+          cwByHeight = Math.min(cwByHeight, limit);
+        }
+        const cw = Math.max(1, Math.min(cwByWidth, cwByHeight));
+        // метрика: используем площадь
+        const area = cw * RH * cols; // приблизительно
+        if (!bestCol || area > bestCol.area){ bestCol = { cols, cw, colIdxs, area }; }
+      }
+      if (bestCol){
+        const offX = x + Math.max(0, Math.floor((RW - (bestCol.cols*bestCol.cw + gap*(bestCol.cols-1))) / 2));
+        for (let c=0; c<bestCol.cols; c++){
+          const list = bestCol.colIdxs[c];
+          // вертикальная центровка содержимого колонки
+          const colHeights = list.map(i=> Math.max(1, Math.floor(bestCol.cw / (desiredAR[i] || (16/9)))));
+          const colTotal = colHeights.reduce((s,h)=> s+h, 0) + gap * Math.max(0, colHeights.length - 1);
+          let colY = y + Math.max(0, Math.floor((RH - colTotal) / 2));
+          for (let k=0; k<list.length; k++){
+            const idx = list[k];
+            const el = items[idx]; const ar = desiredAR[idx]; if (!el || !ar) break;
+            const h = Math.max(1, Math.floor(bestCol.cw / ar));
+            // clamp последнего, чтобы не вылезти за RH из-за округлений
+            const remaining = (y + RH) - colY;
+            const hClamped = Math.max(1, Math.min(h, remaining));
+            el.style.boxSizing='border-box';
+            el.style.position='absolute';
+            el.style.left = (offX + c*(bestCol.cw+gap)) + 'px';
+            el.style.top  = colY + 'px';
+            el.style.setProperty('width',  bestCol.cw + 'px', 'important');
+            el.style.setProperty('height', hClamped + 'px', 'important');
+            el.style.aspectRatio='';
+            colY += hClamped + gap;
+            if (colY > y + RH) break;
+            placed++;
+          }
+        }
+        return;
+      }
+    }
+
+    function distributeCounts(n, rows){
+      const base=Math.floor(n/rows), rem=n%rows; return Array.from({length:rows},(_,i)=> base+(i<rem?1:0));
+    }
+
+    let best=null;
+    for(let rows=1; rows<=maxRows; rows++){
+      const counts=distributeCounts(n, rows);
+      const availH = (RH - gap*(rows-1)) / rows; if (!(availH>0)) continue;
+      let i=0, totalH=0; const rowsMeta=[];
+      for(let r=0;r<rows;r++){
+        const cnt=counts[r]; const idxs=Array.from({length:cnt},(_,k)=> i+k).filter(j=> j<n);
+        const sumAR = idxs.reduce((s,j)=> s+desiredAR[j],0) || (16/9);
+        const hRow = Math.max(1, Math.min(availH, (RW - gap*(idxs.length-1)) / sumAR));
+        rowsMeta.push({ idxs, h: hRow }); totalH += hRow; i += cnt;
+      }
+      totalH += gap*(rowsMeta.length-1);
+      const fits = totalH <= RH + 0.5; const score=(fits?0:10000)+Math.abs(RH-totalH);
+      if(!best || score<best.score) best={rowsMeta,score,totalH};
+    }
+    if(!best) return;
+
+    const totalRowsH = Math.round(best.totalH || 0);
+    let yCur = y + Math.max(0, Math.floor((RH - totalRowsH) / 2));
+    for(const row of best.rowsMeta){
+      const hInt = Math.floor(row.h);
+      const gapsW = gap * (row.idxs.length - 1);
+      const roundW = row.idxs.map(j=> Math.round((desiredAR[j] || (16/9)) * hInt));
+      let sumW = roundW.reduce((s,w)=> s+w, 0);
+      const targetTilesW = RW - gapsW; let delta = targetTilesW - sumW;
+      if (Math.abs(delta) <= 2 && roundW.length){
+        roundW[roundW.length-1] = Math.max(1, roundW[roundW.length-1] + delta);
+        sumW += delta;
+      }
+      const rowTotal = sumW + gapsW;
+      let xCur = x + Math.max(0, Math.round((RW - rowTotal) / 2));
+      for(let k=0;k<row.idxs.length;k++){
+        const el = items[row.idxs[k]]; if(!el) continue;
+        const w = roundW[k];
+        el.style.boxSizing='border-box';
+        el.style.position='absolute';
+        el.style.left = px(xCur);
+        el.style.top  = px(yCur);
+        el.style.setProperty('width',  px(w), 'important');
+        el.style.setProperty('height', px(hInt), 'important');
+        el.style.aspectRatio='';
+        xCur += w + gap;
+        placed++;
+      }
+      yCur += hInt + gap;
+    }
+
+    // Fallback: если что-то пошло не так и ничего не разложили — ровная строка по всей ширине
+    if (!placed){
+      const cw = Math.floor((RW - gap*(n-1)) / n);
+      const ch = Math.max(1, Math.min(RH, Math.floor(RH)));
+      let xCur = x;
+      for (let i=0; i<n; i++){
+        const el = items[i]; if (!el) continue;
+        el.style.boxSizing='border-box';
+        el.style.position='absolute';
+        el.style.left = px(xCur);
+        el.style.top  = px(y);
+        el.style.setProperty('width',  px(cw), 'important');
+        el.style.setProperty('height', px(ch), 'important');
+        el.style.aspectRatio='';
+        xCur += cw + gap;
+      }
+    }
+  }
+
+  // Case handling
+  const anyVideo = videoTiles.length > 0;
+  const anyNoVid = noVideoTiles.length > 0;
+
+  m.style.position = 'relative';
+  m.classList.add('grid-active');
+
+  if (!anyVideo && anyNoVid){
+    layoutEqualGrid({ x:0, y:0, w:W, h:H }, noVideoTiles, { forceSquare:false });
+    m.style.height = px(H);
+  } else if (anyVideo && !anyNoVid){
+    layoutVideoMosaic({ x:0, y:0, w:W, h:H }, videoTiles);
+    m.style.height = px(H);
+  } else {
+    const isPortrait = matchMedia('(orientation: portrait)').matches;
+    if (isPortrait){
+      const hVid = Math.max(0, Math.round(H * 0.8));
+      const hNo  = Math.max(0, H - hVid - gap);
+      layoutVideoMosaic({ x:0, y:0, w:W, h:hVid }, videoTiles);
+      layoutEqualGrid({ x:0, y:hVid + gap, w:W, h:hNo }, noVideoTiles, { forceSquare:true });
+      m.style.height = px(H);
+    } else {
+      const wVid = Math.max(0, Math.round(W * 0.8));
+      const wNo  = Math.max(0, W - wVid - gap);
+      layoutVideoMosaic({ x:0, y:0, w:wVid, h:H }, videoTiles);
+      layoutEqualGrid({ x:wVid + gap, y:0, w:wNo, h:H }, noVideoTiles, { forceSquare:true });
+      m.style.height = px(H);
+    }
+  }
+
   tiles.forEach(t=> t.classList.remove('spotlight','thumb'));
 }
 
@@ -494,13 +617,65 @@ const tilesMutObs = new MutationObserver((muts)=>{
     if (m.type === 'attributes'){ requestLayout(); return; } // data-ar / class / data-vid
   }
 });
-const tm = tilesMain();
-tm && tilesMutObs.observe(tm, {
-  childList:true,
-  subtree:true,
-  attributes:true,
-  attributeFilter:['data-ar','class','data-vid']
-});
+let tilesMutObsAttached = false;
+function attachTilesMutObs(){
+  if (tilesMutObsAttached) return;
+  const tm = tilesMain();
+  if (!tm) return;
+  tilesMutObs.observe(tm, {
+    childList:true,
+    subtree:true,
+    attributes:true,
+    attributeFilter:['data-ar','class','data-vid']
+  });
+  tilesMutObsAttached = true;
+}
+attachTilesMutObs();
+document.addEventListener('DOMContentLoaded', attachTilesMutObs);
+
+/* ==== Наблюдение за изменением реального разрешения видео (resize/metadata + RAF) ==== */
+function attachVideoARWatcher(video){
+  if (!video || video.__mobArWatchAttached) return;
+  const handler = ()=>{
+    const tile = video.closest?.('.tile');
+    if (!tile) return;
+    setTileAspectFromVideo(tile, video);
+    if (isMobileGrid() || isMobileView()) layoutUniformGrid(); else safeFitSpotlightSize();
+  };
+  video.addEventListener('loadedmetadata', handler);
+  video.addEventListener('loadeddata', handler);
+  video.addEventListener('resize', handler);
+  // RAF-пуллер на случай отсутствия события resize у конкретной платформы
+  let lastW = 0, lastH = 0;
+  const poll = ()=>{
+    if (!video.isConnected){ video.__mobArWatchAttached = false; return; }
+    const w = video.videoWidth|0, h = video.videoHeight|0;
+    if (w && h && (w!==lastW || h!==lastH)){
+      lastW = w; lastH = h; handler();
+    }
+    video.__mobArWatchRAF = requestAnimationFrame(poll);
+  };
+  video.__mobArWatchAttached = true;
+  poll();
+}
+function installVideoARWatchers(){
+  const root = tilesMain() || document;
+  root.querySelectorAll('video').forEach(attachVideoARWatcher);
+  if (installVideoARWatchers._mo) installVideoARWatchers._mo.disconnect();
+  const mo = new MutationObserver((muts)=>{
+    for (const m of muts){
+      m.addedNodes && m.addedNodes.forEach(node=>{
+        if (node.nodeType!==1) return;
+        if (node.matches?.('video')) attachVideoARWatcher(node);
+        node.querySelectorAll?.('video').forEach(attachVideoARWatcher);
+      });
+    }
+  });
+  mo.observe(root, { childList:true, subtree:true });
+  installVideoARWatchers._mo = mo;
+}
+installVideoARWatchers();
+document.addEventListener('DOMContentLoaded', installVideoARWatchers);
 
 /* Экспорт — на случай ручного пересчёта извне */
 export function relayoutTilesIfMobile(){
