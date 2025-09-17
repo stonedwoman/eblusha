@@ -355,6 +355,15 @@ function layoutUniformGrid(){
   const videoTiles = allTiles.filter(t=> hasVideo(t));
   const noVideoTiles = allTiles.filter(t=> !hasVideo(t));
 
+  // «свою» плитку показываем первой
+  const sortMeFirst = (arr)=> arr.slice().sort((a,b)=>{
+    const am = a.classList.contains('me');
+    const bm = b.classList.contains('me');
+    if (am && !bm) return -1; if (!am && bm) return 1; return 0;
+  });
+  const videoTilesSorted   = sortMeFirst(videoTiles);
+  const noVideoTilesSorted = sortMeFirst(noVideoTiles);
+
   const px = (v)=> Math.round(v) + 'px';
 
   // Helpers: place equal grid in rect
@@ -616,25 +625,26 @@ function layoutUniformGrid(){
   m.classList.add('grid-active');
 
   if (!anyVideo && anyNoVid){
-    layoutEqualGrid({ x:0, y:0, w:W, h:H }, noVideoTiles, { forceSquare:false });
+    // Без видео — квадратные тайлы оптимального размера, центрируем
+    layoutEqualGrid({ x:0, y:0, w:W, h:H }, noVideoTilesSorted, { forceSquare:true });
     m.style.height = px(H);
   } else if (anyVideo && !anyNoVid){
     // одинаковая «меньшая грань» у всех видео
-    layoutVideoEqualMinor({ x:0, y:0, w:W, h:H }, videoTiles);
+    layoutVideoEqualMinor({ x:0, y:0, w:W, h:H }, videoTilesSorted);
     m.style.height = px(H);
   } else {
     const isPortrait = matchMedia('(orientation: portrait)').matches;
     if (isPortrait){
       const hVid = Math.max(0, Math.round(H * 0.8));
       const hNo  = Math.max(0, H - hVid - gap);
-      layoutVideoEqualMinor({ x:0, y:0, w:W, h:hVid }, videoTiles);
-      layoutEqualGrid({ x:0, y:hVid + gap, w:W, h:hNo }, noVideoTiles, { forceSquare:true });
+      layoutVideoEqualMinor({ x:0, y:0, w:W, h:hVid }, videoTilesSorted);
+      layoutEqualGrid({ x:0, y:hVid + gap, w:W, h:hNo }, noVideoTilesSorted, { forceSquare:true });
       m.style.height = px(H);
     } else {
       const wVid = Math.max(0, Math.round(W * 0.8));
       const wNo  = Math.max(0, W - wVid - gap);
-      layoutVideoEqualMinor({ x:0, y:0, w:wVid, h:H }, videoTiles);
-      layoutEqualGrid({ x:wVid + gap, y:0, w:wNo, h:H }, noVideoTiles, { forceSquare:true });
+      layoutVideoEqualMinor({ x:0, y:0, w:wVid, h:H }, videoTilesSorted);
+      layoutEqualGrid({ x:wVid + gap, y:0, w:wNo, h:H }, noVideoTilesSorted, { forceSquare:true });
       m.style.height = px(H);
     }
   }
