@@ -132,6 +132,55 @@ export async function connectLiveKit(token){
   registerParticipant(ctx.room.localParticipant);
   getRemoteParticipants().forEach(registerParticipant);
 
+  // Гидратация уже подписанных треков (если подключились к существующей сессии)
+  try {
+    const enumerateVideoPubs = (p)=>{
+      const out = [];
+      try {
+        if (p?.videoTracks && typeof p.videoTracks.forEach === 'function'){
+          p.videoTracks.forEach(pub=> out.push(pub));
+        }
+        if (p?.trackPublications && typeof p.trackPublications.forEach === 'function'){
+          p.trackPublications.forEach(pub=>{ if (pub?.kind === 'video' || pub?.track?.kind === 'video') out.push(pub); });
+        }
+        if (p?.tracks && typeof p.tracks.forEach === 'function'){
+          p.tracks.forEach(pub=>{ if (pub?.kind === 'video' || pub?.track?.kind === 'video') out.push(pub); });
+        }
+        if (typeof p?.getTrackPublications === 'function'){
+          (p.getTrackPublications()||[]).forEach(pub=>{ if (pub?.kind === 'video' || pub?.track?.kind === 'video') out.push(pub); });
+        }
+      } catch {}
+      return out;
+    };
+
+    const attachFromPubs = (p)=>{
+      enumerateVideoPubs(p).forEach(pub=>{
+        try {
+          // гарантируем подписку
+          if (typeof pub?.setSubscribed === 'function' && !pub.isSubscribed){
+            pub.setSubscribed(true);
+          }
+        } catch {}
+        const track = pub?.track;
+        if (!track) return;
+        const isScreen = (pub?.source===Track.Source.ScreenShare || pub?.source===Track.Source.ScreenShareAudio);
+        const id = p.identity + (isScreen ? '#screen' : '');
+        attachVideoToTile(track, id, !!p.isLocal, (isScreen ? 'Экран' : undefined));
+        markHasVideo(p.identity, true);
+      });
+    };
+
+    const hydrateWithRetry = (tries = 10)=>{
+      attachFromPubs(ctx.room.localParticipant);
+      getRemoteParticipants().forEach(attachFromPubs);
+      // если уже появились видео — можно не повторять
+      if (document.querySelector('.tile video') || tries <= 0) return;
+      setTimeout(()=> hydrateWithRetry(tries-1), 200);
+    };
+
+    hydrateWithRetry(12);
+  } catch {}
+
   await ensureMicOn();
   applyLayout();
   refreshControls();

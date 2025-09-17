@@ -1,7 +1,7 @@
 // ===== Desktop layout (spotlight + rail) =====
 import { ctx } from "../state.js";
 import { byId } from "../utils.js";
-import { createTileEl, tilesMain, tilesRail } from "../tiles.js";
+import { createTileEl, tilesMain, tilesRail, relayoutTilesForce } from "../tiles.js";
 import { usersCounterText } from "../registry.js";
 
 /* ----------------------------- Утилиты ----------------------------------- */
@@ -60,6 +60,48 @@ export function fitSpotlightSize(){
       if (Math.abs(ar2 - ar) > 0.001) fitSpotlightSize();
     }
   });
+}
+
+/* =================== THUMBS: Equal minor side in rail ==================== */
+function getContentWidth(el){
+  if (!el) return 0;
+  const cs = getComputedStyle(el);
+  const pad = (parseFloat(cs.paddingLeft)||0) + (parseFloat(cs.paddingRight)||0);
+  return Math.max(0, (el.clientWidth || el.getBoundingClientRect().width) - pad);
+}
+function getTileAR(tile){
+  const d = parseFloat(tile.dataset.ar);
+  if (d && isFinite(d) && d>0) return d;
+  const v = tile.querySelector('video');
+  const w = v?.videoWidth|0, h = v?.videoHeight|0;
+  if (w>0 && h>0) return w/h;
+  return tile.classList.contains('portrait') ? (9/16) : (16/9);
+}
+export function layoutRailEqualMinor(){
+  try{
+    const rail = tilesRail(); if (!rail) return;
+    const tiles = Array.from(rail.querySelectorAll('.tile.thumb'));
+    if (!tiles.length) return;
+    const W = getContentWidth(rail); if (W <= 0) return;
+
+    // S — общая «меньшая грань» (для вертикальных это ширина, для горизонтальных — высота)
+    let maxAR = 1; // среди горизонтальных
+    tiles.forEach(t=>{ const ar = getTileAR(t); if (ar>=1 && ar>maxAR) maxAR = ar; });
+    const S = Math.max(1, Math.floor(Math.min(W, W / maxAR)));
+
+    tiles.forEach(t=>{
+      const ar = getTileAR(t);
+      let w, h;
+      if (ar >= 1){ // горизонтальное
+        h = S; w = Math.round(S * ar);
+      } else {      // вертикальное
+        w = S; h = Math.round(S / ar);
+      }
+      t.style.width  = w + 'px';
+      t.style.height = h + 'px';
+      t.style.margin = '0 auto';
+    });
+  }catch{}
 }
 
 /* Подсветка активных спикеров (общая фича) */
@@ -140,43 +182,18 @@ export function applyLayout(){
     }
   }
 
-  const spotlightId = chooseAutoSpotlight();
-  const totalTiles  = document.querySelectorAll('.tile').length;
-
-  tiles.classList.add('spotlight');
-  tiles.classList.toggle('single', totalTiles<=1);
-
-  // Сброс мобильных инлайновых стилей на main
-  if (main){
-    main.style.gridTemplateColumns = '';
-    main.style.display = '';
-    main.style.gap = '';
-    main.style.gridAutoFlow = '';
-    main.style.alignContent = '';
-    main.style.justifyContent = '';
-  }
-  document.querySelectorAll('.tile').forEach(t=>{
-    t.style.aspectRatio = '';
-  });
-
+  // Desktop: используем такую же мозаику, как на мобилках (равная меньшая грань + 80/20 при аватарках)
+  tiles.classList.remove('spotlight','single');
   document.querySelectorAll('.tile').forEach(t=>{
     t.classList.remove('spotlight','thumb');
-    t.style.width=''; t.style.height='';
-    const id=t.dataset.pid;
-    if(id===spotlightId){
-      if (t.parentElement !== main) main.appendChild(t);
-      t.classList.add('spotlight');
-    } else {
-      if (totalTiles>1){
-        if (t.parentElement !== rail) rail.appendChild(t);
-        t.classList.add('thumb');
-      } else {
-        if (t.parentElement !== main) main.appendChild(t);
-      }
-    }
+    t.style.width=''; t.style.height=''; t.style.aspectRatio='';
+    if (t.parentElement !== main) main.appendChild(t);
   });
 
-  fitSpotlightSize();
+  // Переложить stage мозаикой
+  try { relayoutTilesForce(); } catch {}
+  // страховочный повтор ещё раз кадром позже
+  requestAnimationFrame(()=> { try { relayoutTilesForce(); } catch {} });
   updateUsersCounter();
 }
 
@@ -187,7 +204,8 @@ export function initLayout(){
 
   // На старте разложим и подгоним спотлайт
   applyLayout();
-  fitSpotlightSize();
+  // и ещё раз после небольшого таймаута — на случай поздней инициализации LiveKit tracks
+  setTimeout(()=> applyLayout(), 120);
 
   // Ресайз
   on(window, 'resize', ()=> fitSpotlightSize(), { passive:true });

@@ -238,6 +238,7 @@ export function showAvatarInTile(identity){
   t.dataset.vid = '';
   delete t.dataset.ar;
   try { markHasVideo(identity.replace('#screen',''), false); } catch {}
+  // Если плитка стала без видео — гарантированно показываем плейсхолдер
   if(!t.querySelector('.placeholder')){
     const ph=document.createElement('div');
     ph.className='placeholder';
@@ -328,7 +329,6 @@ function getFieldSize(){
 
 let layoutRAF = 0;
 function requestLayout(){
-  if (!isMobileGrid()) return;
   if (layoutRAF) return;
   layoutRAF = requestAnimationFrame(()=>{ layoutRAF = 0; layoutUniformGrid(); });
 }
@@ -533,6 +533,81 @@ function layoutUniformGrid(){
     }
   }
 
+  // Helpers: video layout with equal minor side across all tiles
+  function layoutVideoEqualMinor(rect, items){
+    const n = items.length; if (!n) return;
+    const { x, y, w:RW, h:RH } = rect;
+    const ars = items.map(getVideoAR).map(a=> (a && isFinite(a) && a>0) ? a : 16/9);
+    const isP  = ars.map(a=> a < 1);
+
+    function distributeCounts(n, rows){
+      const base=Math.floor(n/rows), rem=n%rows; return Array.from({length:rows},(_,i)=> base+(i<rem?1:0));
+    }
+
+    let best=null;
+    const maxRows = Math.min(3, Math.max(1, n));
+    for (let rows=1; rows<=maxRows; rows++){
+      const counts = distributeCounts(n, rows);
+      // build row index groups
+      let idx=0; const groups=[];
+      for (let r=0; r<rows; r++){ const c=counts[r]; const ids=[]; for(let k=0;k<c && idx<n;k++,idx++) ids.push(idx); groups.push(ids); }
+      // width constraints per row and height coefficients
+      const wLimits = [];
+      let sumHCoef = 0;
+      for (let r=0; r<rows; r++){
+        const ids = groups[r]; const gapsRow = gap * Math.max(0, ids.length - 1);
+        if (!ids.length){ wLimits.push(Infinity); continue; }
+        const widthCoef = ids.reduce((s,i)=> s + (isP[i] ? 1 : ars[i]), 0);
+        const hCoefRow  = ids.reduce((m,i)=> Math.max(m, isP[i] ? (1/ars[i]) : 1), 0);
+        const limitW = (RW - gapsRow) / Math.max(0.0001, widthCoef);
+        wLimits.push(limitW);
+        sumHCoef += hCoefRow;
+      }
+      const limitH = (RH - gap * Math.max(0, rows - 1)) / Math.max(0.0001, sumHCoef);
+      const S = Math.floor(Math.max(0, Math.min(limitH, ...wLimits)));
+      if (!(S>0)) continue;
+      if (!best || S > best.S) best = { S, rows, groups };
+    }
+    if (!best) return;
+
+    const S = best.S;
+    // vertical centering: compute total used height
+    const rowHeights = best.groups.map(ids=>{
+      if (!ids.length) return 0;
+      const hRow = ids.reduce((m,i)=> Math.max(m, isP[i] ? Math.round(S/ars[i]) : S), 0);
+      return hRow;
+    });
+    const usedH = rowHeights.reduce((s,h)=> s+h, 0) + gap * Math.max(0, best.groups.length-1);
+    let yCur = y + Math.max(0, Math.floor((RH - usedH) / 2));
+
+    for (let r=0; r<best.groups.length; r++){
+      const ids = best.groups[r];
+      if (!ids.length) continue;
+      const gapsRow = gap * Math.max(0, ids.length - 1);
+      // widths with equal minor S
+      const widths = ids.map(i=> isP[i] ? S : Math.round(S * ars[i]));
+      const sumW = widths.reduce((s,w)=> s+w, 0);
+      const delta = (RW - gapsRow) - sumW;
+      if (Math.abs(delta) <= 2 && widths.length) widths[widths.length-1] = Math.max(1, widths[widths.length-1] + delta);
+      const rowH = rowHeights[r];
+      let xCur = x + Math.max(0, Math.floor((RW - (sumW + gapsRow)) / 2));
+      for (let k=0; k<ids.length; k++){
+        const i = ids[k]; const el = items[i]; if (!el) continue;
+        const wTile = widths[k];
+        const hTile = isP[i] ? Math.round(S / ars[i]) : S;
+        el.style.boxSizing='border-box';
+        el.style.position='absolute';
+        el.style.left = px(xCur);
+        el.style.top  = px(yCur + Math.floor((rowH - hTile)/2));
+        el.style.setProperty('width',  px(wTile), 'important');
+        el.style.setProperty('height', px(hTile), 'important');
+        el.style.aspectRatio='';
+        xCur += wTile + gap;
+      }
+      yCur += rowH + gap;
+    }
+  }
+
   // Case handling
   const anyVideo = videoTiles.length > 0;
   const anyNoVid = noVideoTiles.length > 0;
@@ -544,20 +619,21 @@ function layoutUniformGrid(){
     layoutEqualGrid({ x:0, y:0, w:W, h:H }, noVideoTiles, { forceSquare:false });
     m.style.height = px(H);
   } else if (anyVideo && !anyNoVid){
-    layoutVideoMosaic({ x:0, y:0, w:W, h:H }, videoTiles);
+    // одинаковая «меньшая грань» у всех видео
+    layoutVideoEqualMinor({ x:0, y:0, w:W, h:H }, videoTiles);
     m.style.height = px(H);
   } else {
     const isPortrait = matchMedia('(orientation: portrait)').matches;
     if (isPortrait){
       const hVid = Math.max(0, Math.round(H * 0.8));
       const hNo  = Math.max(0, H - hVid - gap);
-      layoutVideoMosaic({ x:0, y:0, w:W, h:hVid }, videoTiles);
+      layoutVideoEqualMinor({ x:0, y:0, w:W, h:hVid }, videoTiles);
       layoutEqualGrid({ x:0, y:hVid + gap, w:W, h:hNo }, noVideoTiles, { forceSquare:true });
       m.style.height = px(H);
     } else {
       const wVid = Math.max(0, Math.round(W * 0.8));
       const wNo  = Math.max(0, W - wVid - gap);
-      layoutVideoMosaic({ x:0, y:0, w:wVid, h:H }, videoTiles);
+      layoutVideoEqualMinor({ x:0, y:0, w:wVid, h:H }, videoTiles);
       layoutEqualGrid({ x:wVid + gap, y:0, w:wNo, h:H }, noVideoTiles, { forceSquare:true });
       m.style.height = px(H);
     }
@@ -584,8 +660,8 @@ function clearGrid(){
 }
 
 /* --- реагируем на изменения окружения --- */
-window.addEventListener('resize', ()=>{ if (isMobileGrid()) requestLayout(); }, { passive:true });
-window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ if (isMobileGrid()) requestLayout(); }, 60); }, { passive:true });
+window.addEventListener('resize', ()=>{ requestLayout(); }, { passive:true });
+window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ requestLayout(); }, 60); }, { passive:true });
 
 /* ResizeObserver — следим и за .tiles-main, и за #tiles */
 let roMain = null;
@@ -598,11 +674,11 @@ function attachROs(){
   if (roHost){ roHost.disconnect(); roHost = null; }
 
   if (m){
-    roMain = new ResizeObserver(()=>{ if (isMobileGrid()) requestLayout(); });
+    roMain = new ResizeObserver(()=>{ requestLayout(); });
     roMain.observe(m);
   }
   if (h){
-    roHost = new ResizeObserver(()=>{ if (isMobileGrid()) requestLayout(); });
+    roHost = new ResizeObserver(()=>{ requestLayout(); });
     roHost.observe(h);
   }
 }
@@ -611,7 +687,6 @@ document.addEventListener('DOMContentLoaded', attachROs);
 
 /* Перестраиваем при изменениях DOM/атрибутов (горячее подключение, смена AR) */
 const tilesMutObs = new MutationObserver((muts)=>{
-  if (!isMobileGrid()) return;
   for (const m of muts){
     if (m.type === 'childList' && (m.addedNodes.length || m.removedNodes.length)){ requestLayout(); return; }
     if (m.type === 'attributes'){ requestLayout(); return; } // data-ar / class / data-vid
@@ -680,4 +755,9 @@ document.addEventListener('DOMContentLoaded', installVideoARWatchers);
 /* Экспорт — на случай ручного пересчёта извне */
 export function relayoutTilesIfMobile(){
   if (isMobileGrid()) layoutUniformGrid(); else clearGrid();
+}
+
+// Принудительный пересчёт мозаики (используется десктоп-профилем)
+export function relayoutTilesForce(){
+  layoutUniformGrid();
 }
