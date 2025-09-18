@@ -547,7 +547,7 @@ function layoutUniformGrid(){
   function layoutVideoMosaic(rect, items){
     const n = items.length; if (!n) return;
     const { x, y, w:RW, h:RH } = rect;
-    const desiredAR = items.map(getVideoAR).map(ar=> (ar && isFinite(ar))? ar : 16/9);
+    const desiredAR = items.map(getVideoAR).map(ar=> (ar && isFinite(ar))? ar : 1);
     const maxRows = Math.min(3, Math.max(1, n));
     let placed = 0;
 
@@ -686,7 +686,7 @@ function layoutUniformGrid(){
   function layoutVideoEqualMinor(rect, items){
     const n = items.length; if (!n) return;
     const { x, y, w:RW, h:RH } = rect;
-    const ars = items.map(getVideoAR).map(a=> (a && isFinite(a) && a>0) ? a : 16/9);
+    const ars = items.map(getVideoAR).map(a=> (a && isFinite(a) && a>0) ? a : 1);
     const isP  = ars.map(a=> a < 1);
 
     function distributeCounts(n, rows){
