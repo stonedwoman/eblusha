@@ -1,3 +1,7 @@
+/* Hide mobile carousel dots artifacts on desktop */
+@media (min-width: 641px) {
+  .foot-dots { display: none !important; visibility: hidden !important; }
+}
 /* ===== Desktop + Base (loaded for all, mobiles override) ===== */
 :root{
   --bg:#2f3136; --bg2:#202225; --bg3:#18191c; --panel:#2a2d31; --line:#3a3d43;

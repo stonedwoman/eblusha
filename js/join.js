@@ -9,6 +9,23 @@ import { initFootDots } from "./ui-settings-ice-init.js";         // будет 
 /* ===== Вход ===== */
 byId('authForm').addEventListener('submit', async (e)=>{ e.preventDefault(); await joinRoom(); });
 
+// Автозаполнение: случайный ник и комната 123
+function randomNick(){
+  const animals=["Лиса","Барсук","Ёж","Кит","Слон","Крот","Енот","Единорог","Краб","Косатка","Сапсан","Дельфин"];
+  const adj=["Шустрый","Весёлый","Сонный","Ловкий","Смелый","Молчаливый","Лучезарный","Грозный","Тихий","Шумный","Юркий","Небесный"];
+  const a=animals[Math.floor(Math.random()*animals.length)];
+  const b=adj[Math.floor(Math.random()*adj.length)];
+  return `${b} ${a}`;
+}
+function applyDefaults(){
+  try{
+    if (byId('name') && !byId('name').value) byId('name').value = randomNick();
+    if (byId('room')) byId('room').value = '123';
+  }catch{}
+}
+applyDefaults();
+document.addEventListener('DOMContentLoaded', applyDefaults);
+
 export async function joinRoom(){
   try{
     state.me.name=(byId('name').value||'').trim()||('user-'+Math.random().toString(36).slice(2,7));

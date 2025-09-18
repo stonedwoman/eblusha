@@ -67,6 +67,17 @@ html, body{
 .tile .controls{display:none !important}
 /* было: object-fit: cover; */
 .tile video { width:100%; height:100%; object-fit: contain; object-position:center; }
+.mini-dlg{ position:fixed; inset:0; z-index:1200; display:none; }
+.mini-dlg.open{ display:block; }
+.mini-dlg .mini-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.45); backdrop-filter: blur(4px); }
+.mini-dlg .mini-panel{ position:absolute; left:50%; top:50%; transform:translate(-50%, -50%);
+  width:min(520px, 60vw); max-height:min(80vh, 580px); border:1px solid var(--line); border-radius:16px; background:rgba(30,32,36,.95); box-shadow: var(--shadow);
+  color:#fff; overflow:hidden; padding-bottom: env(safe-area-inset-bottom, 0px); }
+.mini-dlg .mini-head{ display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(255,255,255,.06); }
+.mini-dlg .mini-title{ font-weight:600; }
+.mini-dlg .mini-close{ margin-left:auto; width:28px; height:28px; border-radius:8px; border:1px solid #444; background:#1f2329; color:#fff; }
+.mini-dlg .mini-body{ padding:12px; display:grid; gap:12px; }
+.mini-dlg .mini-row{ display:grid; gap:6px; font-size:14px; }
 
 /* В мозаике (мобильной) сохраняем AR внутри одинаковых ячеек */
 .tiles-main.grid-active .tile video,
@@ -74,6 +85,11 @@ html, body{
   object-fit: contain !important;
   object-position: center;
 }
+
+/* Mini tiles (20% area): hide controls, keep only name */
+.tile.mini .vol { display:none !important; }
+.tile.mini .controls { display:none !important; }
+.tile.mini .name { left:6px; right:6px; bottom:6px; font-size:11px; padding:3px 6px; text-align:left; }
 
 /* Кастомный скроллбар плиток — в портретной мозаике скрыт */
 .tiles-sbar{ display:none !important }

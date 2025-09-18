@@ -30,6 +30,53 @@ const ovMedia = byId('ovMedia');
 const ovClose = byId('ovClose');
 const ovName  = byId('ovName');
 let ovReturnTile = null;
+/* ==== Mini-settings (mobile) ==== */
+let miniDlg = null;
+function ensureMiniDlg(){
+  if (miniDlg) return miniDlg;
+  miniDlg = document.createElement('div');
+  miniDlg.className = 'mini-dlg';
+  miniDlg.innerHTML = `
+    <div class="mini-backdrop"></div>
+    <div class="mini-panel" role="dialog" aria-modal="true">
+      <div class="mini-head"><span class="mini-title"></span><button class="mini-close" aria-label="Закрыть">×</button></div>
+      <div class="mini-body">
+        <label class="mini-row">Громкость
+          <input class="mini-vol" type="range" min="0" max="100" value="100"/>
+        </label>
+        <label class="mini-row">Качество звука
+          <select class="mini-quality">
+            <option value="auto">Авто</option>
+            <option value="music">Музыка</option>
+            <option value="speech">Речь</option>
+          </select>
+        </label>
+      </div>
+    </div>`;
+  document.body.appendChild(miniDlg);
+  const close = ()=> miniDlg.classList.remove('open');
+  miniDlg.querySelector('.mini-backdrop').addEventListener('click', close);
+  miniDlg.querySelector('.mini-close').addEventListener('click', close);
+  return miniDlg;
+}
+function openMiniSettings(tile){
+  const pid = tile?.dataset?.pid; if (!pid) return;
+  const rec = ctx.registry.get(pid.replace('#screen',''));
+  const dlg = ensureMiniDlg();
+  dlg.querySelector('.mini-title').textContent = tile.dataset.name || pid;
+  const volEl = dlg.querySelector('.mini-vol');
+  const qEl   = dlg.querySelector('.mini-quality');
+  const curVol = Math.round((rec?.volume ?? 1) * 100);
+  volEl.value = String(curVol);
+  volEl.oninput = (e)=>{
+    const v = Math.max(0, Math.min(100, Number(e.target.value||0)));
+    if (rec){ rec.volume = v/100; if (rec.audioEl) rec.audioEl.volume = rec.volume; }
+  };
+  qEl.value = 'auto';
+  miniDlg.classList.add('open');
+}
+// expose for debugging/use
+try{ window.openMiniSettings = openMiniSettings; }catch{}
 
 export async function openTileOverlay(tile){
   const v = tile.querySelector('video');
@@ -88,8 +135,31 @@ export function createTileEl(identity, name, isLocal){
       e.stopPropagation();
       return;
     }
+    // На мобилке: для мини-тайлов открываем всплывающее меню настроек
+    if (isMobileView() && el.classList.contains('mini')){
+      try { openMiniSettings(el); } catch {}
+      e.stopPropagation();
+      return;
+    }
     if(el.querySelector('video')){ openTileOverlay(el); }
   });
+
+// Делегированный обработчик для мини-тайлов (на случай отсутствия локального listener)
+document.addEventListener('click', (e)=>{
+  try{
+    if (!isMobileView()) return;
+    const t = e.target && (e.target.closest ? e.target.closest('.tile') : null);
+    if (t){
+      // если это мини-тайл или тайл без видео — открываем настройки
+      const isMini = t.classList.contains('mini');
+      const hasVid = !!t.querySelector('video');
+      if (!isMini && hasVid) return;
+      openMiniSettings(t);
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }catch{}
+}, true);
 
   el.addEventListener('input',(e)=>{
     if(e.target?.dataset?.act!=='vol') return;
@@ -132,7 +202,7 @@ export function setTileAspectFromVideo(tile, videoEl){
   if (!w || !h) return;
 
   tile.classList.toggle('portrait', h > w);
-  tile.dataset.ar = (w>0 && h>0) ? (w/h).toFixed(6) : '';
+  tile.dataset.ar = (w>0 && h>0) ? String(w/h) : '';
   tile.dataset.vid = '1'; // пометка «есть видео»
 
   // гарантируем нахождение тайла в основном контейнере
@@ -226,6 +296,7 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
   const tryApply = ()=> setTileAspectFromVideo(tile, v);
   v.addEventListener('loadedmetadata', tryApply);
   v.addEventListener('resize', tryApply);
+  v.addEventListener('loadeddata', tryApply);
   tryApply();
 
   // Форсируем пересчёт: сразу и через небольшой таймаут.
@@ -241,16 +312,22 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
     layoutUniformGrid();
     setTimeout(()=> layoutUniformGrid(), 60);
   } else {
-    requestLayout();
+  requestLayout();
   }
 }
 
 export function ensureTile(identity, name, isLocal){
   let el = document.querySelector(`.tile[data-pid="${CSS.escape(identity)}"]`);
   if(el) return el;
-  if(!identity.includes('#screen') && ctx.registry.has(identity)){
-    return ctx.registry.get(identity).tile;
+  const baseId = identity.replace('#screen','');
+  // Создаём тайл только для участника, который есть в реестре
+  const rec = ctx.registry.get(baseId);
+  if (!rec) return null;
+  if(!identity.includes('#screen')){
+    // для базового тайла можно вернуть уже существующий из реестра
+    return rec.tile || createTileEl(identity, name, isLocal);
   }
+  // для screen создаём отдельный тайл, но только если есть базовый участник
   return createTileEl(identity, name, isLocal);
 }
 
@@ -278,7 +355,7 @@ export function showAvatarInTile(identity){
     layoutUniformGrid();
     setTimeout(()=>{ if (isMobileGrid()) layoutUniformGrid(); }, 50);
   } else {
-    requestLayout();
+  requestLayout();
   }
 }
 
@@ -310,19 +387,19 @@ function hasVideo(tile){
 }
 
 function getVideoAR(tile){
-  const d = parseFloat(tile.dataset.ar);
-  if (d && isFinite(d) && d > 0) return d;
   const v = tile.querySelector('video');
   const w = v?.videoWidth|0, h = v?.videoHeight|0;
-  return (w>0 && h>0) ? (w/h) : NaN;
+  if (w>0 && h>0) return w/h;  // всегда отдаём фактический AR видео, если доступен
+  const d = parseFloat(tile.dataset.ar);
+  return (d && isFinite(d) && d > 0) ? d : NaN;
 }
 
 function getTileAR(tile){
-  const d = parseFloat(tile.dataset.ar);
-  if (d && isFinite(d) && d > 0) return d;
   const v = tile.querySelector('video');
   const w = v?.videoWidth|0, h = v?.videoHeight|0;
-  if (w>0 && h>0) return w/h;
+  if (w>0 && h>0) return w/h;   // приоритет фактическим размерам видео
+  const d = parseFloat(tile.dataset.ar);
+  if (d && isFinite(d) && d > 0) return d;
   return tile.classList.contains('portrait') ? (9/16) : (16/9);
 }
 
@@ -396,6 +473,7 @@ function layoutUniformGrid(){
   // Helpers: place equal grid in rect
   function layoutEqualGrid(rect, items, opts){
     const forceSquare = !!(opts && opts.forceSquare);
+    const asMini      = !!(opts && opts.asMini);
     const n = items.length; if (!n) return;
     const { x, y, w:RW, h:RH } = rect;
     let best=null;
@@ -426,6 +504,8 @@ function layoutUniformGrid(){
         el.style.setProperty('width',  px(best.cw), 'important');
         el.style.setProperty('height', px(best.ch), 'important');
         el.style.aspectRatio='';
+        // помечаем мини-тайлы (скрываем внутри слайдер и оставляем только подпись)
+        if (asMini) el.classList.add('mini'); else el.classList.remove('mini');
       }
     }
   }
@@ -665,13 +745,13 @@ function layoutUniformGrid(){
       const hVid = Math.max(0, Math.round(H * 0.8));
       const hNo  = Math.max(0, H - hVid - gap);
       layoutVideoEqualMinor({ x:0, y:0, w:W, h:hVid }, videoTilesSorted);
-      layoutEqualGrid({ x:0, y:hVid + gap, w:W, h:hNo }, noVideoTilesSorted, { forceSquare:true });
+      layoutEqualGrid({ x:0, y:hVid + gap, w:W, h:hNo }, noVideoTilesSorted, { forceSquare:true, asMini:true });
       m.style.height = px(H);
     } else {
       const wVid = Math.max(0, Math.round(W * 0.8));
       const wNo  = Math.max(0, W - wVid - gap);
       layoutVideoEqualMinor({ x:0, y:0, w:wVid, h:H }, videoTilesSorted);
-      layoutEqualGrid({ x:wVid + gap, y:0, w:wNo, h:H }, noVideoTilesSorted, { forceSquare:true });
+      layoutEqualGrid({ x:wVid + gap, y:0, w:wNo, h:H }, noVideoTilesSorted, { forceSquare:true, asMini:true });
       m.style.height = px(H);
     }
   }
@@ -732,14 +812,14 @@ const tilesMutObs = new MutationObserver((muts)=>{
 let tilesMutObsAttached = false;
 function attachTilesMutObs(){
   if (tilesMutObsAttached) return;
-  const tm = tilesMain();
+const tm = tilesMain();
   if (!tm) return;
   tilesMutObs.observe(tm, {
-    childList:true,
-    subtree:true,
-    attributes:true,
-    attributeFilter:['data-ar','class','data-vid']
-  });
+  childList:true,
+  subtree:true,
+  attributes:true,
+  attributeFilter:['data-ar','class','data-vid']
+});
   tilesMutObsAttached = true;
 }
 attachTilesMutObs();
@@ -822,4 +902,42 @@ export function dedupeTilesByPid(){
     const v=t.querySelector('video'); if (v) safeRemoveVideo(v);
     try { t.remove(); } catch {}
   });
+}
+
+/* ===== Утилита: удалить тайл по pid ===== */
+export function removeTileByPid(pid){
+  try{
+    document.querySelectorAll(`.tile[data-pid="${CSS.escape(pid)}"]`).forEach(t=>{
+      const v=t.querySelector('video'); if (v) safeRemoveVideo(v);
+      t.remove();
+    });
+  }catch{}
+}
+
+/* ===== Очистка «сиротских» DOM-элементов и стейла ===== */
+export function cleanupOrphanDom(){
+  try{
+    const allowed = new Set();
+    ctx.registry.forEach((_r, id)=> allowed.add(id));
+
+    // .tile: base pid должен быть в реестре; screen (#screen) без видео удаляем
+    document.querySelectorAll('.tile').forEach(t=>{
+      const pid = t.getAttribute('data-pid'); if (!pid) return;
+      const base = pid.replace(/#screen$/,'');
+      const has = allowed.has(base);
+      const isScreen = /#screen$/.test(pid);
+      const hasVid = !!t.querySelector('video');
+      if (!has || (isScreen && !hasVid)){
+        const v=t.querySelector('video'); if (v) safeRemoveVideo(v);
+        try{ t.remove(); }catch{}
+      }
+    });
+
+    // Списки участников: удаляем только те строки, чей pid отсутствует в реестре.
+    // Дубликаты в разных списках (карусельные панели) оставляем намеренно.
+    document.querySelectorAll('#onlineList [data-pid], .user-list [data-pid]').forEach(row=>{
+      const pid = row.getAttribute('data-pid');
+      if (!allowed.has(pid)) { try{ row.remove(); }catch{}; }
+    });
+  }catch{}
 }

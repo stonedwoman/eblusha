@@ -6,7 +6,7 @@ import { sfx } from "./sfx.js";
 
 /* из следующих файлов (будут в следующей/последующих пачках) */
 import { registerParticipant, unregisterParticipant, markHasVideo, recomputeHasVideo } from "./registry.js";
-import { attachAudioTrack, attachVideoToTile, showAvatarInTile, dedupeTilesByPid } from "./tiles.js";
+import { attachAudioTrack, attachVideoToTile, showAvatarInTile, dedupeTilesByPid, cleanupOrphanDom, removeTileByPid } from "./tiles.js";
 import { applyLayout, highlightSpeaking } from "./layout.js";
 import { refreshControls } from "./controls.js";
 import { wireData } from "./chat-session.js";
@@ -21,6 +21,7 @@ export async function connectLiveKit(token){
     registerParticipant(p);
     applyLayout();
     dedupeTilesByPid();
+    cleanupOrphanDom();
     if(!p.isLocal) sfx('peer-join');
   });
 
@@ -33,6 +34,7 @@ export async function connectLiveKit(token){
       document.querySelectorAll(`.tile[data-pid="${CSS.escape(p.identity)}"]`).forEach(el=> el.remove());
       document.querySelectorAll(`#onlineList [data-pid="${CSS.escape(p.identity)}"], .user-list [data-pid="${CSS.escape(p.identity)}"]`).forEach(el=> el.remove());
     } catch {}
+    cleanupOrphanDom();
     if(!p.isLocal) sfx('peer-leave');
   });
 
@@ -45,6 +47,8 @@ export async function connectLiveKit(token){
     if(track.kind==='audio'){
       attachAudioTrack(track, participant.identity);
     } else {
+      // защита от «фантомного» pid: тайл создаём только если участник есть в реестре
+      if (!ctx.registry.has(participant.identity)) return;
       // защита от дублей: если этот track.sid уже привязан к другому участнику — не прикрепляем
       try {
         const sid = track?.sid || track?.mediaStreamTrack?.id;
@@ -88,10 +92,13 @@ export async function connectLiveKit(token){
     if(track.kind==='video'){
       showAvatarInTile(id);
       recomputeHasVideo(participant.identity);
+      // если это был screen-share — удалим тайл целиком
+      if (/#screen$/.test(id)) removeTileByPid(id);
     }
     (track.detach?.()||[]).forEach(el=>el.remove());
     applyLayout();
     dedupeTilesByPid();
+    cleanupOrphanDom();
   });
 
   ctx.room.on(RoomEvent.TrackMuted,  (pub,p)=>{
@@ -102,6 +109,7 @@ export async function connectLiveKit(token){
       refreshControls();
       applyLayout();
       dedupeTilesByPid();
+      cleanupOrphanDom();
     }
   });
 
@@ -113,6 +121,7 @@ export async function connectLiveKit(token){
       refreshControls();
       applyLayout();
       dedupeTilesByPid();
+      cleanupOrphanDom();
     }
   });
 
@@ -211,6 +220,7 @@ export async function connectLiveKit(token){
   await ensureMicOn();
   applyLayout();
   dedupeTilesByPid();
+  cleanupOrphanDom();
   refreshControls();
 
   startPingLoop();
