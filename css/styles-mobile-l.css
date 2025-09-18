@@ -206,6 +206,7 @@
     width: 100%;
     height: auto;
     background: var(--panel);
+    aspect-ratio: auto;
   }
   .tile.has-video{ background: transparent; }
   .tile.has-video .vol{ display:none !important; }

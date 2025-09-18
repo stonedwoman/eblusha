@@ -340,7 +340,7 @@ body.no-scroll {
 .tile {
   position: relative;
   background: var(--panel);
-  aspect-ratio: 16/9;
+  aspect-ratio: auto; /* не навязываем 16:9 до появления видео */
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 12px;

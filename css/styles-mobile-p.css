@@ -61,7 +61,7 @@ html, body{
   flex:none;
   width:100%;
   height:auto;
-  aspect-ratio:16 / 9;                 /* временно; JS снимет и проставит размеры */
+  aspect-ratio:auto;                   /* не навязываем 16:9 до расчёта JS */
   scroll-snap-align:unset;
   background: var(--panel);
 }
