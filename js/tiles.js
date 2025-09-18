@@ -201,6 +201,13 @@ export function setTileAspectFromVideo(tile, videoEl){
   const h = videoEl.videoHeight | 0;
   if (!w || !h) return;
 
+  // Во время переключения локальной камеры игнорируем промежуточные изменения AR,
+  // чтобы не было скачка формата перед фактической сменой facing
+  try{
+    const isLocalTile = tile.dataset.pid === ctx.room?.localParticipant?.identity;
+    if (isLocalTile && ctx._camSwitching) return;
+  }catch{}
+
   tile.classList.toggle('portrait', h > w);
   tile.dataset.ar = (w>0 && h>0) ? String(w/h) : '';
   tile.dataset.vid = '1'; // пометка «есть видео»
@@ -398,6 +405,9 @@ function hasVideo(tile){
 }
 
 function getVideoAR(tile){
+  // Если установлен «замороженный» AR — используем его (во время переключения камеры)
+  const fr = parseFloat(tile?.dataset?.freezeAr);
+  if (fr && isFinite(fr) && fr > 0) return fr;
   const v = tile.querySelector('video');
   const w = v?.videoWidth|0, h = v?.videoHeight|0;
   if (w>0 && h>0) return w/h;  // всегда отдаём фактический AR видео, если доступен
@@ -900,6 +910,24 @@ window.addEventListener('app:local-video-replaced', ()=>{
     setTimeout(layoutUniformGrid, 160);
   }catch{}
 });
+
+// Длительная стабилизация AR после переключения камеры (iOS может менять размеры дольше 300мс)
+function stabilizeAfterLocalVideoChange(totalMs = 2600, stepMs = 200){
+  let elapsed = 0;
+  const tick = ()=>{
+    try{
+      document.querySelectorAll('.tile video').forEach(v=>{
+        const tile = v.closest('.tile');
+        if (tile) setTileAspectFromVideo(tile, v);
+      });
+      layoutUniformGrid();
+    }catch{}
+    elapsed += stepMs;
+    if (elapsed < totalMs) setTimeout(tick, stepMs);
+  };
+  setTimeout(tick, stepMs);
+}
+window.addEventListener('app:local-video-replaced', ()=> stabilizeAfterLocalVideoChange(3000, 220));
 
 /* Экспорт — на случай ручного пересчёта извне */
 export function relayoutTilesIfMobile(){

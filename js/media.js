@@ -7,6 +7,8 @@ import {
   showAvatarInTile,
   applyCamTransformsToLive,
   getLocalTileVideo,
+  setTileAspectFromVideo,
+  relayoutTilesForce,
 } from "./tiles.js";
 import {
   Track,
@@ -166,6 +168,16 @@ export async function ensureCameraOn(){
   window.requestAnimationFrame(applyCamTransformsToLive);
   // дать времени стабилизировать размеры и пересчитать мозаики
   setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+  // форс-обновление AR локального видео
+  const arTick = ()=>{
+    const v = getLocalTileVideo();
+    if (!v) return;
+    const tile = v.closest('.tile');
+    if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
+  };
+  // 3 секунды мягкой стабилизации AR
+  const ticks = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
+  ticks.forEach(ms=> setTimeout(arTick, ms));
 }
 
 async function trySwitchFacingOnSameTrack(newFacing){
@@ -242,6 +254,7 @@ byId("btnCam")?.addEventListener("click", toggleCam);
 export async function toggleFacing(){
   if(!ctx.room || !isCamActuallyOn() || camBusy) return;
   camBusy = true;
+  ctx._camSwitching = true;
   const btn = byId("btnFacing"); if (btn) btn.disabled = true;
 
   const prevFacing = state.settings.camFacing || "user";
@@ -250,6 +263,15 @@ export async function toggleFacing(){
   try{
     // 1) мягкий путь — restartTrack, если есть
     if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
+      // freeze AR while switching
+      try{
+        const v0 = getLocalTileVideo();
+        const tile0 = v0?.closest('.tile');
+        if (v0 && tile0){
+          const ar0 = (v0.videoWidth>0 && v0.videoHeight>0) ? (v0.videoWidth/v0.videoHeight) : (tile0.classList.contains('portrait')? (9/16):(16/9));
+          tile0.dataset.freezeAr = String(ar0);
+        }
+      }catch{}
       await ctx.localVideoTrack.restartTrack({ facingMode: nextFacing });
       state.settings.camFacing = nextFacing;
       window.requestAnimationFrame(()=>{
@@ -258,6 +280,10 @@ export async function toggleFacing(){
           const tile = v.closest(".tile");
           if (tile) tile.classList.toggle("portrait", v.videoHeight>v.videoWidth);
           applyCamTransformsToLive();
+          const unfreeze = ()=>{ try{ delete tile.dataset.freezeAr; }catch{} };
+          setTimeout(unfreeze, 300);
+          setTimeout(unfreeze, 800);
+          setTimeout(unfreeze, 1600);
         }
       });
     }
@@ -286,6 +312,15 @@ export async function toggleFacing(){
       ctx.localVideoTrack = newTrack;
       applyCamTransformsToLive();
       setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+      // форс-обновление AR локального видео после смены facing
+      const arTick2 = ()=>{
+        const v = getLocalTileVideo();
+        if (!v) return;
+        const tile = v.closest('.tile');
+        if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
+      };
+      const ticks2 = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
+      ticks2.forEach(ms=> setTimeout(arTick2, ms));
     }
 
     applyLayout();
@@ -296,6 +331,7 @@ export async function toggleFacing(){
   }finally{
     camBusy = false;
     if (btn) btn.disabled = false;
+    setTimeout(()=>{ ctx._camSwitching = false; }, 400);
     window.dispatchEvent(new Event("app:refresh-ui"));
   }
 }
