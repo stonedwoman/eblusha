@@ -5,6 +5,30 @@ import { byId, hashColor, isMobileView } from "./utils.js";
 import { fitSpotlightSize, applyLayout } from "./layout.js";
 import { markHasVideo, recomputeHasVideo } from "./registry.js";
 
+// ===== Debug AR toggler =====
+const __DBG_AR__ = (()=>{
+  try{
+    const qs = new URLSearchParams(location.search);
+    if (qs.get('debug') === 'ar') return true;
+    const ls = localStorage.getItem('debugAR');
+    return ls === '1';
+  }catch{ return false; }
+})();
+function dbgAR(...a){ if (__DBG_AR__) try{ console.log('[AR]', ...a); }catch{} }
+function setTileBadge(tile, text){
+  if (!__DBG_AR__ || !tile) return;
+  let b = tile.querySelector('.ar-badge');
+  if (!b){
+    b = document.createElement('div');
+    b.className = 'ar-badge';
+    Object.assign(b.style, { position:'absolute', left:'6px', top:'6px', zIndex:'5',
+      background:'rgba(0,0,0,.5)', color:'#fff', fontSize:'10px', padding:'2px 4px',
+      borderRadius:'6px', pointerEvents:'none' });
+    tile.appendChild(b);
+  }
+  b.textContent = text;
+}
+
 // Безопасная обёртка для fitSpotlightSize
 function safeFitSpotlightSize() {
   try {
@@ -211,6 +235,8 @@ export function setTileAspectFromVideo(tile, videoEl){
   tile.classList.toggle('portrait', h > w);
   tile.dataset.ar = (w>0 && h>0) ? String(w/h) : '';
   tile.dataset.vid = '1'; // пометка «есть видео»
+  dbgAR('setTileAspectFromVideo', tile.dataset.pid, `${w}x${h}`, (w/h).toFixed(3));
+  setTileBadge(tile, `${(w/h).toFixed(3)} (${w}x${h})`);
 
   // сохраняем последний известный AR в реестре
   try{
@@ -411,6 +437,7 @@ function getVideoAR(tile){
   const v = tile.querySelector('video');
   const w = v?.videoWidth|0, h = v?.videoHeight|0;
   if (w>0 && h>0) return w/h;  // всегда отдаём фактический AR видео, если доступен
+  dbgAR('getVideoAR no meta', tile.dataset.pid);
   // fallback: попробуем реальные размеры DOM-кадра (после первого рендера)
   try{
     const rw = Math.round(v.getBoundingClientRect().width);
