@@ -277,6 +277,7 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
   tile.querySelector('.placeholder')?.remove();
   // убираем фон-«плашку» у тайла с видео
   try { tile.style.background='transparent'; } catch {}
+  try { tile.classList.add('has-video'); } catch {}
 
   const v = track.attach();
   v.autoplay = true;
@@ -340,6 +341,7 @@ export function showAvatarInTile(identity){
   t.dataset.vid = '';
   delete t.dataset.ar;
   try { markHasVideo(identity.replace('#screen',''), false); } catch {}
+  try { t.classList.remove('has-video'); } catch {}
   // Если плитка стала без видео — гарантированно показываем плейсхолдер
   if(!t.querySelector('.placeholder')){
     const ph=document.createElement('div');

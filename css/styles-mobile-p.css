@@ -63,7 +63,9 @@ html, body{
   height:auto;
   aspect-ratio:16 / 9;                 /* временно; JS снимет и проставит размеры */
   scroll-snap-align:unset;
+  background: var(--panel);
 }
+.tile.has-video{ background: transparent; }
 .tile .controls{display:none !important}
 /* было: object-fit: cover; */
 .tile video { width:100%; height:100%; object-fit: contain; object-position:center; }
@@ -89,7 +91,7 @@ html, body{
 /* Mini tiles (20% area): hide controls, keep only name */
 .tile.mini .vol { display:none !important; }
 .tile.mini .controls { display:none !important; }
-.tile.mini .name { left:6px; right:6px; bottom:6px; font-size:11px; padding:3px 6px; text-align:left; }
+  .tile.mini .name { left:6px; right:6px; bottom:6px; font-size:11px; padding:3px 6px; text-align:left; }
 
 /* Кастомный скроллбар плиток — в портретной мозаике скрыт */
 .tiles-sbar{ display:none !important }
