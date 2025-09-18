@@ -205,6 +205,13 @@ export function setTileAspectFromVideo(tile, videoEl){
   tile.dataset.ar = (w>0 && h>0) ? String(w/h) : '';
   tile.dataset.vid = '1'; // пометка «есть видео»
 
+  // сохраняем последний известный AR в реестре
+  try{
+    const baseId = (tile.dataset.pid||'').replace('#screen','');
+    const rec = ctx.registry.get(baseId);
+    if (rec) rec.lastAR = w>0 && h>0 ? (w/h) : rec.lastAR;
+  }catch{}
+
   // гарантируем нахождение тайла в основном контейнере
   const m = tilesMain(); if (m && tile.parentElement !== m) m.appendChild(tile);
 
@@ -312,6 +319,8 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
   if (isMobileGrid() || isMobileView()){
     layoutUniformGrid();
     setTimeout(()=> layoutUniformGrid(), 60);
+    setTimeout(()=> layoutUniformGrid(), 160);
+    setTimeout(()=> layoutUniformGrid(), 320);
   } else {
   requestLayout();
   }
@@ -392,6 +401,18 @@ function getVideoAR(tile){
   const v = tile.querySelector('video');
   const w = v?.videoWidth|0, h = v?.videoHeight|0;
   if (w>0 && h>0) return w/h;  // всегда отдаём фактический AR видео, если доступен
+  // fallback: попробуем реальные размеры DOM-кадра (после первого рендера)
+  try{
+    const rw = Math.round(v.getBoundingClientRect().width);
+    const rh = Math.round(v.getBoundingClientRect().height);
+    if (rw>0 && rh>0) return rw/rh;
+  }catch{}
+  // fallback: последний известный AR из реестра
+  try{
+    const baseId = (tile.dataset.pid||'').replace('#screen','');
+    const rec = ctx.registry.get(baseId);
+    if (rec && rec.lastAR && isFinite(rec.lastAR) && rec.lastAR>0) return rec.lastAR;
+  }catch{}
   const d = parseFloat(tile.dataset.ar);
   return (d && isFinite(d) && d > 0) ? d : NaN;
 }
@@ -870,6 +891,15 @@ function installVideoARWatchers(){
 }
 installVideoARWatchers();
 document.addEventListener('DOMContentLoaded', installVideoARWatchers);
+
+// реагируем на событие из media.js после замены локального трека
+window.addEventListener('app:local-video-replaced', ()=>{
+  try{
+    layoutUniformGrid();
+    setTimeout(layoutUniformGrid, 60);
+    setTimeout(layoutUniformGrid, 160);
+  }catch{}
+});
 
 /* Экспорт — на случай ручного пересчёта извне */
 export function relayoutTilesIfMobile(){

@@ -164,6 +164,8 @@ export async function ensureCameraOn(){
   ctx.localVideoTrack = newTrack;
   attachVideoToTile(newTrack, ctx.room.localParticipant.identity, true);
   window.requestAnimationFrame(applyCamTransformsToLive);
+  // дать времени стабилизировать размеры и пересчитать мозаики
+  setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
 }
 
 async function trySwitchFacingOnSameTrack(newFacing){
@@ -283,6 +285,7 @@ export async function toggleFacing(){
 
       ctx.localVideoTrack = newTrack;
       applyCamTransformsToLive();
+      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
     }
 
     applyLayout();
