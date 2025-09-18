@@ -28,6 +28,11 @@ export async function connectLiveKit(token){
     unregisterParticipant(p.identity);
     applyLayout();
     dedupeTilesByPid();
+    // подчистим возможные висячие тайлы и строки по DOM на всякий случай
+    try {
+      document.querySelectorAll(`.tile[data-pid="${CSS.escape(p.identity)}"]`).forEach(el=> el.remove());
+      document.querySelectorAll(`#onlineList [data-pid="${CSS.escape(p.identity)}"], .user-list [data-pid="${CSS.escape(p.identity)}"]`).forEach(el=> el.remove());
+    } catch {}
     if(!p.isLocal) sfx('peer-leave');
   });
 

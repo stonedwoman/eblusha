@@ -35,15 +35,17 @@ export function unregisterParticipant(id){
   const rec = ctx.registry.get(id);
   if (!rec) return;
 
-  rec.tile?.remove();
-  rec.row?.remove();
+  // Удаляем все плитки и строки этого участника из DOM
+  try { rec.tile?.remove(); } catch {}
+  try { rec.row?.remove(); } catch {}
+  try { document.querySelectorAll(`.tile[data-pid="${CSS.escape(id)}"]`).forEach(el=> el.remove()); } catch {}
   
-  // Удаляем из обоих списков участников
-  const lists = document.querySelectorAll('#onlineList');
-  lists.forEach(list => {
-    const rows = list.querySelectorAll(`[data-pid="${CSS.escape(id)}"]`);
-    rows.forEach(row => row.remove());
-  });
+  // Удаляем из всех списков участников (и id, и class-списки)
+  try {
+    document.querySelectorAll('#onlineList, .user-list').forEach(list => {
+      list.querySelectorAll(`[data-pid="${CSS.escape(id)}"]`).forEach(row => row.remove());
+    });
+  } catch {}
   
   ctx.registry.delete(id);
   updateUsersCounter();

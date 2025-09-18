@@ -69,6 +69,7 @@ export function createTileEl(identity, name, isLocal){
 
   el.dataset.pid=identity;
   el.dataset.name=name;
+  // Цвет фона только для аватарок; для видео — фон убираем при появлении
   el.style.background = hashColor(name);
 
   const vol = isLocal ? '' :
@@ -204,6 +205,8 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
 
   if (curV) safeRemoveVideo(curV);
   tile.querySelector('.placeholder')?.remove();
+  // убираем фон-«плашку» у тайла с видео
+  try { tile.style.background='transparent'; } catch {}
 
   const v = track.attach();
   v.autoplay = true;
@@ -267,6 +270,8 @@ export function showAvatarInTile(identity){
     ph.innerHTML=`<div class="avatar-ph">${(t.dataset.name||'?').slice(0,1).toUpperCase()}</div>`;
     t.prepend(ph);
   }
+  // вернём фон-«плашку» для аватарки
+  try { t.style.background = hashColor(t.dataset.name||''); } catch {}
   if (t.classList.contains('spotlight')) fitSpotlightSize();
   try { applyLayout(); } catch {}
   if (isMobileGrid()){
