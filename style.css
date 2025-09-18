@@ -363,6 +363,7 @@ body.no-scroll {
   border-radius: 8px;
   font-size: 12px;
   z-index: 2;
+  pointer-events: none;
 }
 
 /* Мини-тайл (20% зона на мобилке/ландшафте): оставляем только подпись */
