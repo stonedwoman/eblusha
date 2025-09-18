@@ -29,6 +29,26 @@ function setTileBadge(tile, text){
   b.textContent = text;
 }
 
+// ==== Quality badge (always visible for video tiles) ====
+function formatPLabel(w, h){
+  const n = Math.max(1, Math.min(w|0, h|0));
+  const std = [144, 240, 270, 360, 480, 540, 720, 900, 1080, 1440, 2160];
+  let best = std[0];
+  for (const s of std){ if (n >= s) best = s; else break; }
+  return best + 'p';
+}
+function setQualityBadge(tile, w, h){
+  if (!tile) return;
+  let b = tile.querySelector('.q-badge');
+  if (!b){
+    b = document.createElement('div');
+    b.className = 'q-badge';
+    b.textContent = '';
+    tile.appendChild(b);
+  }
+  b.textContent = formatPLabel(w, h);
+}
+
 // Безопасная обёртка для fitSpotlightSize
 function safeFitSpotlightSize() {
   try {
@@ -248,12 +268,12 @@ export function setTileAspectFromVideo(tile, videoEl){
   // гарантируем нахождение тайла в основном контейнере
   const m = tilesMain(); if (m && tile.parentElement !== m) m.appendChild(tile);
 
-  if (isMobileView()){
+  // Всегда форсируем перераскладку (и на десктопе в мозаике тоже)
+  try{
     layoutUniformGrid();
-    setTimeout(()=>{ if (isMobileView()) layoutUniformGrid(); }, 60);
-  } else if (tile.classList.contains('spotlight')) {
-    safeFitSpotlightSize();
-  }
+    setTimeout(layoutUniformGrid, 60);
+  }catch{}
+  if (tile.classList.contains('spotlight')) safeFitSpotlightSize();
 }
 
 export function applyCamTransformsTo(el){
@@ -324,6 +344,8 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
   v.playsInline = true;
   v.setAttribute('autoplay','');
   v.setAttribute('playsinline','');
+  // скрываем видео до прихода корректных метаданных, чтобы не влиять на первый лэйаут
+  v.style.visibility = 'hidden';
   if (isLocal){
     v.muted = true;
     v.setAttribute('muted','');
@@ -334,7 +356,14 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
 
   if(isLocal && !identity.includes('#screen')) applyCamTransformsTo(v);
 
-  const tryApply = ()=> setTileAspectFromVideo(tile, v);
+  const tryApply = ()=> {
+    setTileAspectFromVideo(tile, v);
+    // как только получили валидные размеры — показываем видео и форсим релейаут
+    if ((v.videoWidth|0) > 0 && (v.videoHeight|0) > 0){
+      v.style.visibility = '';
+      try { layoutUniformGrid(); setTimeout(layoutUniformGrid, 30); } catch {}
+    }
+  };
   v.addEventListener('loadedmetadata', tryApply);
   v.addEventListener('resize', tryApply);
   v.addEventListener('loadeddata', tryApply);

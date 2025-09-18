@@ -72,12 +72,12 @@ body.no-scroll{overflow:hidden}
 .tiles-rail{display:none}
 .tiles.spotlight .tiles-rail{display:flex; grid-column:2; flex-direction:column; gap:var(--tile-gap); min-width:0; max-width:var(--rail-w); min-height:0; overflow:auto}
 
-.tile{position:relative; background:var(--panel); aspect-ratio:16/9; width:100%; border:1px solid var(--line); border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center}
+.tile{position:relative; background:var(--panel); aspect-ratio:auto; width:100%; border:1px solid var(--line); border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center}
 .tile.portrait{aspect-ratio:9/16}
 .tile .name{position:absolute; left:10px; bottom:10px; background:rgba(0,0,0,.55); padding:4px 8px; border-radius:8px; font-size:12px; z-index:2}
 .tile .controls{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; gap:10px; opacity:0; transition:.2s; z-index:2}
 .tile:hover .controls{opacity:1}
-.tile video, .tile .media{position:absolute; inset:0; width:100% !important; height:100% !important; max-width:100%; max-height:100%; object-fit:cover}
+.tile video, .tile .media{position:absolute; inset:0; width:100% !important; height:100% !important; max-width:100%; max-height:100%; object-fit:contain}
 .tile .placeholder{position:absolute; inset:0; display:grid; place-items:center}
 .tile .avatar-ph{width:38%; aspect-ratio:1; border-radius:50%; background:var(--panel); border:1px dashed var(--line); display:grid; place-items:center; font-weight:700; color:#aeb4bd}
 .ctrl{padding:8px 10px; border-radius:10px; border:1px solid var(--line); background:var(--panel); cursor:pointer}
