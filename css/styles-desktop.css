@@ -152,7 +152,7 @@ body.no-scroll{overflow:hidden}
 @media (min-width:641px){
   .tiles{font-size:clamp(14px,1.1vw,18px)}
   .tiles-main{place-items:stretch; align-content:start}
-  .tile{width:100%; height:auto; aspect-ratio:16/9}
+  .tile{width:100%; height:auto; aspect-ratio:auto}
   .tile .name{font-size:.9em}
   .ctrl{font-size:1em}
   .vol{font-size:.9em}
@@ -172,11 +172,11 @@ body.no-scroll{overflow:hidden}
   .tile{
     width: 100%;
     height: 100%;
-    aspect-ratio: 16 / 9 !important;
+    aspect-ratio: auto !important;
   }
   /* наша плитка ничем не отличается: такая же 16:9 */
   .tile.me{
     width: 100%;
     height: 100%;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: auto !important;
   }

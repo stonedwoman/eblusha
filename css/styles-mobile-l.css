@@ -242,7 +242,7 @@
   
   .tile.me,
   .tile.has-avatar {
-    aspect-ratio: 16/9 !important;
+    aspect-ratio: auto !important;
   }
 
   /* Override desktop carousel flattening */

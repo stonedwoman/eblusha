@@ -40,7 +40,7 @@ export function fitSpotlightSize(){
   const box = main.getBoundingClientRect();
   // Вычисляем AR из самого видео, fallback к классам
   const v = tile.querySelector('video');
-  let ar = 16/9;
+  let ar = 1;
   if (v && v.videoWidth > 0 && v.videoHeight > 0){ ar = v.videoWidth / v.videoHeight; }
   else if (tile.classList.contains('portrait')) ar = 9/16;
 

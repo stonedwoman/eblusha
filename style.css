@@ -802,7 +802,7 @@ body.no-scroll {
 .cam-preview video {
     width: 100% !important;
     height: 100% !important;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 /* ===== DESKTOP OPTIMIZATION ===== */
@@ -824,7 +824,7 @@ body.no-scroll {
   .tile {
     width: 100%;
     height: auto;
-    aspect-ratio: 16/9;
+    aspect-ratio: auto;
   }
   
   .tile .name { font-size: .9em; }

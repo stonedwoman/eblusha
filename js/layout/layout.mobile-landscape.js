@@ -33,7 +33,7 @@ function applyEqualGrid(){
   if (W < 10 || H < 10) { requestAnimationFrame(applyEqualGrid); return; }
 
   const gap = parseFloat(getComputedStyle(m).getPropertyValue('--tile-gap')) || 10;
-  const AR  = 16/9;
+  const AR  = 1; // нейтральный дефолт, JS подгонит по реальному видео
 
   let best = { area: -1, cols: 1, rows: N, cellW: 0, cellH: 0 };
 
