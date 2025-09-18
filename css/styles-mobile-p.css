@@ -64,6 +64,8 @@ html, body{
   aspect-ratio:auto;                   /* не навязываем 16:9 до расчёта JS */
   scroll-snap-align:unset;
   background: var(--panel);
+  /* не позволяем внутренним элементам задавать свои aspect-ratio */
+  contain: layout paint;
 }
 .tile.has-video{ background: transparent; }
 .tile.has-video .vol{ display:none !important; }

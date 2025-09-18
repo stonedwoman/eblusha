@@ -1,3 +1,5 @@
+/* Prevent default 16:9 on tiles; JS sets sizes explicitly */
+.tile { aspect-ratio: auto !important; }
 /* Hide mobile carousel dots artifacts on desktop */
 @media (min-width: 641px) {
   .foot-dots { display: none !important; visibility: hidden !important; }
