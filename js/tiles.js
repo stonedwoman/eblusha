@@ -358,6 +358,9 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
 
   const tryApply = ()=> {
     setTileAspectFromVideo(tile, v);
+    if ((v.videoWidth|0) > 0 && (v.videoHeight|0) > 0){
+      setQualityBadge(tile, v.videoWidth|0, v.videoHeight|0);
+    }
     // как только получили валидные размеры — показываем видео и форсим релейаут
     if ((v.videoWidth|0) > 0 && (v.videoHeight|0) > 0){
       v.style.visibility = '';
