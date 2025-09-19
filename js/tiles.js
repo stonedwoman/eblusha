@@ -39,16 +39,14 @@ function formatPLabel(w, h){
 }
 function setQualityBadge(tile, w, h){
   if (!tile) return;
-  // Встраиваем в .name, чтобы бейдж был внутри подписи
-  const name = tile.querySelector('.name');
-  if (!name) return;
-  let q = name.querySelector('.q');
-  if (!q){
-    q = document.createElement('span');
-    q.className = 'q';
-    name.appendChild(q);
+  let b = tile.querySelector('.q-badge');
+  if (!b){
+    b = document.createElement('div');
+    b.className = 'q-badge';
+    b.textContent = '';
+    tile.appendChild(b);
   }
-  q.textContent = formatPLabel(w, h);
+  b.textContent = formatPLabel(w, h);
 }
 
 // Безопасная обёртка для fitSpotlightSize
@@ -472,12 +470,6 @@ function getVideoAR(tile){
   const w = v?.videoWidth|0, h = v?.videoHeight|0;
   if (w>0 && h>0) return w/h;  // всегда отдаём фактический AR видео, если доступен
   dbgAR('getVideoAR no meta', tile.dataset.pid);
-  // fallback: попробуем реальные размеры DOM-кадра (после первого рендера)
-  try{
-    const rw = Math.round(v.getBoundingClientRect().width);
-    const rh = Math.round(v.getBoundingClientRect().height);
-    if (rw>0 && rh>0) return rw/rh;
-  }catch{}
   // fallback: последний известный AR из реестра
   try{
     const baseId = (tile.dataset.pid||'').replace('#screen','');

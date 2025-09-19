@@ -145,7 +145,7 @@ body.no-scroll{overflow:hidden}
 .modal-foot .spacer{flex:1}
 .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px}
 .card h4{margin:0 0 8px}
-.cam-preview{margin-top:8px; aspect-ratio:16/9; border:1px solid var(--line); border-radius:10px; background:var(--bg3); display:grid; place-items:center; overflow:hidden}
+.cam-preview{margin-top:8px; aspect-ratio:auto; border:1px solid var(--line); border-radius:10px; background:var(--bg3); display:grid; place-items:center; overflow:hidden}
 .cam-preview video{width:100% !important; height:100% !important; object-fit:contain}
 
 /* Desktop: normalize scale inside tiles */

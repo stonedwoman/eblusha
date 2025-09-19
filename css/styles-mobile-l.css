@@ -14,7 +14,7 @@
     max-height: 100dvh;
     overflow: hidden;
   }
-  .vol{display:none}
+  
   .stage {
     grid-area: stage;
     margin-top: 0;
