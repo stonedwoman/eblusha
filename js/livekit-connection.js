@@ -67,15 +67,6 @@ export async function connectLiveKit(token){
           showAvatarInTile(id);
           recomputeHasVideo(participant.identity);
           applyLayout();
-    // после подписки дождёмся first frame и перепривяжем AR (на случай неверного первого кадра)
-    try{
-      const v = document.querySelector(`.tile[data-pid="${CSS.escape(id)}"] video`);
-      if (v){
-        v.addEventListener('loadedmetadata', ()=>{ try{ v.dispatchEvent(new Event('resize')); }catch{} }, { once:true });
-        setTimeout(()=>{ try{ v.dispatchEvent(new Event('resize')); }catch{} }, 100);
-        setTimeout(()=>{ try{ v.dispatchEvent(new Event('resize')); }catch{} }, 300);
-      }
-    }catch{}
         });
         media.addEventListener('mute',  ()=>{
           showAvatarInTile(id);

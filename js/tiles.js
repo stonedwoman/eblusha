@@ -551,20 +551,6 @@ function layoutUniformGrid(){
   const videoTiles = allTiles.filter(t=> hasVideo(t));
   const noVideoTiles = allTiles.filter(t=> !hasVideo(t));
 
-  // Если есть видео-тайлы без валидных метаданных (AR пока неизвестен) —
-  // подождём, чтобы не зафиксировать неверную геометрию на первом кадре.
-  try{
-    const pending = videoTiles.filter(t=>{ const ar = getVideoAR(t); return !(ar>0 && isFinite(ar)); });
-    if (pending.length){
-      // Перепробуем чуть позже, метаданные обычно приходят мгновенно
-      if (!layoutRAF){
-        setTimeout(()=>{ try{ layoutUniformGrid(); }catch{} }, 30);
-        setTimeout(()=>{ try{ layoutUniformGrid(); }catch{} }, 120);
-      }
-      return;
-    }
-  }catch{}
-
   // «свою» плитку показываем первой
   const sortMeFirst = (arr)=> arr.slice().sort((a,b)=>{
     const am = a.classList.contains('me');

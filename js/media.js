@@ -10,20 +10,6 @@ import {
   setTileAspectFromVideo,
   relayoutTilesForce,
 } from "./tiles.js";
-// === Helper: enforce native (real) aspect ratio on the capture track ===
-async function enforceNativeAROnTrack(lkTrack){
-  try{
-    const mst = lkTrack?.mediaStreamTrack;
-    if (!mst || typeof mst.getSettings !== 'function' || typeof mst.applyConstraints !== 'function') return;
-    const s = mst.getSettings();
-    const ar = (s.aspectRatio && isFinite(s.aspectRatio)) ? s.aspectRatio : ((s.width>0 && s.height>0) ? (s.width/s.height) : null);
-    const constraints = {};
-    if (ar && isFinite(ar)) constraints.aspectRatio = { exact: ar };
-    // try to avoid crop/scaling if browser supports
-    constraints.resizeMode = 'none';
-    await mst.applyConstraints(constraints).catch(()=>{});
-  }catch{}
-}
 import {
   Track,
   createLocalAudioTrack,
@@ -167,8 +153,6 @@ export async function ensureCameraOn(){
   const old = ctx.localVideoTrack || camPub()?.track || null;
 
   const newTrack = await createLocalVideoTrack(constraints);
-  // Try to immediately enforce native AR (no preset forcing)
-  await enforceNativeAROnTrack(newTrack);
   const pub = camPub();
   if (pub){
     await pub.replaceTrack(newTrack);
@@ -289,7 +273,6 @@ export async function toggleFacing(){
         }
       }catch{}
       await ctx.localVideoTrack.restartTrack({ facingMode: nextFacing });
-      await enforceNativeAROnTrack(ctx.localVideoTrack);
       state.settings.camFacing = nextFacing;
       window.requestAnimationFrame(()=>{
         const v = getLocalTileVideo();
@@ -314,7 +297,6 @@ export async function toggleFacing(){
       state.settings.camDevice = ""; // дать браузеру выбрать
 
       const newTrack = await createLocalVideoTrack({ facingMode: { ideal: nextFacing }, frameRate: 24 });
-      await enforceNativeAROnTrack(newTrack);
       const meId = ctx.room.localParticipant.identity;
       const pub = camPub();
 
