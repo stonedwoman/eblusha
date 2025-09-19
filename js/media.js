@@ -16,6 +16,7 @@ import {
   createLocalVideoTrack,
   createLocalScreenTracks,
 } from "./vendor/livekit-loader.js";
+import { applyGlobalVideoQualityMode } from "./quality.js";
 async function createVideoTrackWithFallback(candidates){
   let lastErr = null;
   for (const c of candidates){
@@ -26,6 +27,24 @@ async function createVideoTrackWithFallback(candidates){
   }
   if (lastErr) throw lastErr;
   throw new Error("createLocalVideoTrack failed: no candidates succeeded");
+}
+
+// Expose preset constraints builder to request higher publish resolution by default
+export function buildCamConstraints(deviceId, facing, low){
+  try{
+    const portrait = matchMedia('(orientation: portrait)').matches;
+    const hi = portrait ? { width:{ideal:1280}, height:{ideal:1920}, frameRate:{ideal:30} }
+                        : { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30} };
+    const lo = portrait ? { width:{ideal:480},  height:{ideal:640},  frameRate:{ideal:15} }
+                        : { width:{ideal:640},  height:{ideal:480},  frameRate:{ideal:15} };
+    const base = low ? lo : hi;
+    const dev = deviceId ? { deviceId:{ exact: deviceId } } : { facingMode: { ideal: facing } };
+    return { ...base, ...dev };
+  }catch{
+    // fallback minimal
+    return deviceId ? { deviceId:{ exact: deviceId }, frameRate:24 }
+                    : { facingMode:{ ideal: facing }, frameRate:24 };
+  }
 }
 
 /* ===== Публикации (helpers) ===== */
@@ -56,13 +75,9 @@ export async function ensureMicOn(){
   const lp = ctx.room.localParticipant;
   try{
     if (typeof lp?.setMicrophoneEnabled === "function"){
+      // Keep to minimal defaults to avoid introducing extra processing noise
       await lp.setMicrophoneEnabled(true, {
-        audioCaptureDefaults:{
-          echoCancellation:state.settings.ec,
-          noiseSuppression:state.settings.ns,
-          autoGainControl:state.settings.agc,
-          deviceId: state.settings.micDevice||undefined
-        }
+        audioCaptureDefaults:{ deviceId: state.settings.micDevice||undefined }
       });
       const pub = micPub();
       ctx.localAudioTrack = pub?.track || ctx.localAudioTrack;
@@ -77,12 +92,8 @@ export async function ensureMicOn(){
     return;
   }
   try{
-    const track = await createLocalAudioTrack({
-      echoCancellation:state.settings.ec,
-      noiseSuppression:state.settings.ns,
-      autoGainControl:state.settings.agc,
-      deviceId: state.settings.micDevice||undefined
-    });
+    // Minimal constraints to avoid unintended artifacts
+    const track = await createLocalAudioTrack({ deviceId: state.settings.micDevice||undefined });
     ctx.localAudioTrack = track;
     await ctx.room.localParticipant.publishTrack(track, { source: Track.Source.Microphone });
   }catch(e){ console.error(e); alert("Не удалось включить микрофон: "+(e?.message||e)); }
@@ -96,14 +107,7 @@ export async function toggleMic(){
     const lp  = ctx.room.localParticipant;
     const targetOn = !isMicActuallyOn();
     if (typeof lp?.setMicrophoneEnabled === "function"){
-      await lp.setMicrophoneEnabled(targetOn, {
-        audioCaptureDefaults:{
-          echoCancellation:state.settings.ec,
-          noiseSuppression:state.settings.ns,
-          autoGainControl:state.settings.agc,
-          deviceId: state.settings.micDevice||undefined
-        }
-      });
+      await lp.setMicrophoneEnabled(targetOn, { audioCaptureDefaults:{ deviceId: state.settings.micDevice||undefined } });
     } else {
       let pub = micPub();
       if (!pub){
@@ -157,9 +161,7 @@ export async function pickCameraDevice(facing){
 
 export async function ensureCameraOn(){
   const devId = state.settings.camDevice || await pickCameraDevice(state.settings.camFacing||"user");
-  const constraints = devId
-    ? { frameRate:24, deviceId:{ exact: devId } }
-    : { frameRate:24, facingMode: { exact: state.settings.camFacing||"user" } };
+  const constraints = buildCamConstraints(devId, state.settings.camFacing||"user", state.settings.lowQuality);
 
   const old = ctx.localVideoTrack || camPub()?.track || null;
 
@@ -190,6 +192,8 @@ export async function ensureCameraOn(){
   window.requestAnimationFrame(applyCamTransformsToLive);
   // дать времени стабилизировать размеры и пересчитать мозаики
   setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+  // quality preferences may depend on lowQuality flag
+  try{ applyGlobalVideoQualityMode(); }catch{}
   // форс-обновление AR локального видео
   const arTick = ()=>{
     const v = getLocalTileVideo();

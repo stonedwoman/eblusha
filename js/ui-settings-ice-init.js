@@ -5,7 +5,7 @@ import { fitSpotlightSize, applyLayout, updateMobileScrollbar } from "./layout.j
 import { applyCamTransformsToLive } from "./tiles.js";
 import { setShareButtonMode, refreshControls } from "./controls.js";
 import {
-  micPub, camPub, isCamActuallyOn,
+  micPub, camPub, isCamActuallyOn, buildCamConstraints,
 } from "./media.js";
 import {
   createLocalAudioTrack,
@@ -107,30 +107,14 @@ export async function applySettingsFromModal(closeAfter){
   state.settings.agc=byId("agcChk").checked;
   const low = document.getElementById("lowQChk"); if (low) state.settings.lowQuality = !!low.checked;
 
-  try{
-    const mp = micPub();
-    if (mp){
-      const newMic = await createLocalAudioTrack({
-        echoCancellation:state.settings.ec,
-        noiseSuppression:state.settings.ns,
-        autoGainControl:state.settings.agc,
-        deviceId: state.settings.micDevice||undefined
-      });
-      const oldA = ctx.localAudioTrack || mp.track;
-      await mp.replaceTrack(newMic);
-      await (mp.setMuted?.(false) || mp.unmute?.());
-      try{ oldA?.stop?.(); }catch{}
-      ctx.localAudioTrack=newMic;
-    }
-  }catch(e){ console.warn("mic replace error", e); }
+  // Audio rollback: don't recreate/replace the mic track here to avoid artifacts/noise
+  // New device and processing flags will apply on next mic toggle or join
 
   try{
     const cp = camPub();
     if (cp && isCamActuallyOn()){
       const devId = state.settings.camDevice || null;
-      const constraints = devId
-        ? { frameRate:24, deviceId:{ exact: devId } }
-        : { frameRate:24, facingMode: { exact: state.settings.camFacing||"user" } };
+      const constraints = buildCamConstraints(devId, state.settings.camFacing||"user", state.settings.lowQuality);
       const oldV = ctx.localVideoTrack || cp.track;
       const newCam = await createLocalVideoTrack(constraints);
       await cp.replaceTrack(newCam);

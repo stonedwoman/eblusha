@@ -16,7 +16,8 @@ import { applyPubQuality, applyGlobalVideoQualityMode } from "./quality.js";
 
 /* ===== Подключение LiveKit ===== */
 export async function connectLiveKit(token){
-  ctx.room = new Room({ autoSubscribe:true, adaptiveStream:true, dynacast:true });
+  // Default: best quality subscriptions (no adaptive). Low-quality toggle will enable adaptive later.
+  ctx.room = new Room({ autoSubscribe:true, adaptiveStream:false, dynacast:true });
 
   ctx.room.on(RoomEvent.ParticipantConnected,  (p)=>{
     registerParticipant(p);
