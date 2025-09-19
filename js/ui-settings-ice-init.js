@@ -1,11 +1,10 @@
 import { ctx, state } from "./state.js";
-import { applyGlobalVideoQualityMode } from "./quality.js";
 import { byId, isMobileView } from "./utils.js";
 import { fitSpotlightSize, applyLayout, updateMobileScrollbar } from "./layout.js";
 import { applyCamTransformsToLive } from "./tiles.js";
 import { setShareButtonMode, refreshControls } from "./controls.js";
 import {
-  micPub, camPub, isCamActuallyOn, buildCamConstraints,
+  micPub, camPub, isCamActuallyOn,
 } from "./media.js";
 import {
   createLocalAudioTrack,
@@ -95,7 +94,6 @@ export async function fillDeviceSelects(){
     byId("nsChk").checked=state.settings.ns;
     byId("ecChk").checked=state.settings.ec;
     byId("agcChk").checked=state.settings.agc;
-    const low = document.getElementById("lowQChk"); if (low) low.checked = !!state.settings.lowQuality;
   }catch(e){ console.warn("enumerateDevices error",e); }
 }
 
@@ -105,16 +103,31 @@ export async function applySettingsFromModal(closeAfter){
   state.settings.ns=byId("nsChk").checked;
   state.settings.ec=byId("ecChk").checked;
   state.settings.agc=byId("agcChk").checked;
-  const low = document.getElementById("lowQChk"); if (low) state.settings.lowQuality = !!low.checked;
 
-  // Audio rollback: don't recreate/replace the mic track here to avoid artifacts/noise
-  // New device and processing flags will apply on next mic toggle or join
+  try{
+    const mp = micPub();
+    if (mp){
+      const newMic = await createLocalAudioTrack({
+        echoCancellation:state.settings.ec,
+        noiseSuppression:state.settings.ns,
+        autoGainControl:state.settings.agc,
+        deviceId: state.settings.micDevice||undefined
+      });
+      const oldA = ctx.localAudioTrack || mp.track;
+      await mp.replaceTrack(newMic);
+      await (mp.setMuted?.(false) || mp.unmute?.());
+      try{ oldA?.stop?.(); }catch{}
+      ctx.localAudioTrack=newMic;
+    }
+  }catch(e){ console.warn("mic replace error", e); }
 
   try{
     const cp = camPub();
     if (cp && isCamActuallyOn()){
       const devId = state.settings.camDevice || null;
-      const constraints = buildCamConstraints(devId, state.settings.camFacing||"user", state.settings.lowQuality);
+      const constraints = devId
+        ? { frameRate:24, deviceId:{ exact: devId } }
+        : { frameRate:24, facingMode: { exact: state.settings.camFacing||"user" } };
       const oldV = ctx.localVideoTrack || cp.track;
       const newCam = await createLocalVideoTrack(constraints);
       await cp.replaceTrack(newCam);
@@ -129,8 +142,6 @@ export async function applySettingsFromModal(closeAfter){
 
   applyPreviewTransforms();
   refreshControls();
-  // apply global video quality (subscriptions + adaptiveStream)
-  try{ applyGlobalVideoQualityMode(); }catch{}
   if (closeAfter) closeSettings();
 }
 

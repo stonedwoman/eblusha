@@ -39,9 +39,16 @@ function formatPLabel(w, h){
 }
 function setQualityBadge(tile, w, h){
   if (!tile) return;
-  // Пишем в правую часть name
-  let holder = tile.querySelector('.name .nm-q');
-  if (holder){ holder.textContent = ' · ' + formatPLabel(w, h); }
+  // Встраиваем в .name, чтобы бейдж был внутри подписи
+  const name = tile.querySelector('.name');
+  if (!name) return;
+  let q = name.querySelector('.q');
+  if (!q){
+    q = document.createElement('span');
+    q.className = 'q';
+    name.appendChild(q);
+  }
+  q.textContent = formatPLabel(w, h);
 }
 
 // Безопасная обёртка для fitSpotlightSize
@@ -163,7 +170,7 @@ export function createTileEl(identity, name, isLocal){
 
   el.innerHTML = `
     <div class="placeholder"><div class="avatar-ph">${name.slice(0,1).toUpperCase()}</div></div>
-    <div class="name"><span class="nm-label">${name}${isLocal?' (ты)':''}</span><span class="nm-q"></span></div>
+    <div class="name">${name}${isLocal?' (ты)':''}</div>
     ${vol}
     <div class="controls"><button class="ctrl" data-act="pin" title="В спотлайт">⭐</button></div>`;
 

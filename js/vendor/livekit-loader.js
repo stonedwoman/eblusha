@@ -18,8 +18,7 @@ export const LK = await loadLiveKitSafe();
 export const {
   Room, RoomEvent, Track,
   createLocalAudioTrack, createLocalVideoTrack, createLocalScreenTracks,
-  ConnectionQuality, LogLevel, setLogLevel,
-  VideoQuality
+  ConnectionQuality, LogLevel, setLogLevel
 } = LK;
 
 try { setLogLevel?.(LogLevel?.debug||'debug'); } catch {}
