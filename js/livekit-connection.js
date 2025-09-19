@@ -12,6 +12,7 @@ import { refreshControls } from "./controls.js";
 import { wireData } from "./chat-session.js";
 import { ensureMicOn } from "./media.js";
 import { startPingLoop } from "./ui-settings-ice-init.js";
+import { applyPubQuality, applyGlobalVideoQualityMode } from "./quality.js";
 
 /* ===== Подключение LiveKit ===== */
 export async function connectLiveKit(token){
@@ -84,6 +85,8 @@ export async function connectLiveKit(token){
     }
     applyLayout();
     dedupeTilesByPid();
+    // set quality on this publication (prefer high by default, or low if enabled)
+    try{ applyPubQuality(pub); }catch{}
   });
 
   ctx.room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant)=>{
@@ -222,6 +225,9 @@ export async function connectLiveKit(token){
   dedupeTilesByPid();
   cleanupOrphanDom();
   refreshControls();
+
+  // Apply global quality defaults after connect
+  try{ applyGlobalVideoQualityMode(); }catch{}
 
   startPingLoop();
 }

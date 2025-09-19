@@ -1,4 +1,5 @@
 import { ctx, state } from "./state.js";
+import { applyGlobalVideoQualityMode } from "./quality.js";
 import { byId, isMobileView } from "./utils.js";
 import { fitSpotlightSize, applyLayout, updateMobileScrollbar } from "./layout.js";
 import { applyCamTransformsToLive } from "./tiles.js";
@@ -94,6 +95,7 @@ export async function fillDeviceSelects(){
     byId("nsChk").checked=state.settings.ns;
     byId("ecChk").checked=state.settings.ec;
     byId("agcChk").checked=state.settings.agc;
+    const low = document.getElementById("lowQChk"); if (low) low.checked = !!state.settings.lowQuality;
   }catch(e){ console.warn("enumerateDevices error",e); }
 }
 
@@ -103,6 +105,7 @@ export async function applySettingsFromModal(closeAfter){
   state.settings.ns=byId("nsChk").checked;
   state.settings.ec=byId("ecChk").checked;
   state.settings.agc=byId("agcChk").checked;
+  const low = document.getElementById("lowQChk"); if (low) state.settings.lowQuality = !!low.checked;
 
   try{
     const mp = micPub();
@@ -142,6 +145,8 @@ export async function applySettingsFromModal(closeAfter){
 
   applyPreviewTransforms();
   refreshControls();
+  // apply global video quality (subscriptions + adaptiveStream)
+  try{ applyGlobalVideoQualityMode(); }catch{}
   if (closeAfter) closeSettings();
 }
 
