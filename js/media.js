@@ -16,6 +16,17 @@ import {
   createLocalVideoTrack,
   createLocalScreenTracks,
 } from "./vendor/livekit-loader.js";
+async function createVideoTrackWithFallback(candidates){
+  let lastErr = null;
+  for (const c of candidates){
+    try{
+      const track = await createLocalVideoTrack(c);
+      if (track) return track;
+    }catch(e){ lastErr = e; console.warn("createLocalVideoTrack failed, trying next", c, e); }
+  }
+  if (lastErr) throw lastErr;
+  throw new Error("createLocalVideoTrack failed: no candidates succeeded");
+}
 
 /* ===== Публикации (helpers) ===== */
 export function micPub(){
@@ -152,7 +163,18 @@ export async function ensureCameraOn(){
 
   const old = ctx.localVideoTrack || camPub()?.track || null;
 
-  const newTrack = await createLocalVideoTrack(constraints);
+  // Android может не принять строгие constraints — пробуем последовательность вариантов
+  const isPortrait = matchMedia('(orientation: portrait)').matches;
+  const camFacing = state.settings.camFacing||"user";
+  const candidates = [
+    constraints,
+    { frameRate:24, facingMode: { ideal: camFacing } },
+    // более мягкие вариант без frameRate
+    { facingMode: { ideal: camFacing } },
+    // универсальный минимум
+    {},
+  ];
+  const newTrack = await createVideoTrackWithFallback(candidates);
   const pub = camPub();
   if (pub){
     await pub.replaceTrack(newTrack);
@@ -272,7 +294,12 @@ export async function toggleFacing(){
           tile0.dataset.freezeAr = String(ar0);
         }
       }catch{}
-      await ctx.localVideoTrack.restartTrack({ facingMode: nextFacing });
+      try {
+        await ctx.localVideoTrack.restartTrack({ facingMode: nextFacing });
+      } catch(e) {
+        console.warn('restartTrack failed, will recreate track', e);
+        throw e;
+      }
       state.settings.camFacing = nextFacing;
       window.requestAnimationFrame(()=>{
         const v = getLocalTileVideo();
@@ -296,7 +323,12 @@ export async function toggleFacing(){
       state.settings.camFacing = nextFacing;
       state.settings.camDevice = ""; // дать браузеру выбрать
 
-      const newTrack = await createLocalVideoTrack({ facingMode: { ideal: nextFacing }, frameRate: 24 });
+      const candidates = [
+        { facingMode: { ideal: nextFacing }, frameRate: 24 },
+        { facingMode: { ideal: nextFacing } },
+        {},
+      ];
+      const newTrack = await createVideoTrackWithFallback(candidates);
       const meId = ctx.room.localParticipant.identity;
       const pub = camPub();
 
