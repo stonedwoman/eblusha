@@ -5,6 +5,7 @@ import { connectLiveKit } from "./livekit-connection.js";
 import { sfx } from "./sfx.js";
 import { setShareButtonMode } from "./controls.js";   // будет в следующей пачке
 import { initFootDots } from "./ui-settings-ice-init.js";         // будет в следующей пачке
+import { startUpscaledVideoPublish } from "./video-upscale-publisher.js";
 
 /* ===== Вход ===== */
 byId('authForm').addEventListener('submit', async (e)=>{ e.preventDefault(); await joinRoom(); });
@@ -35,6 +36,33 @@ export async function joinRoom(){
     const r=await fetch(`${TOKEN_ENDPOINT}?room=${encodeURIComponent(state.me.room)}&user=${encodeURIComponent(state.me.name)}`);
     const { token } = await r.json();
     await connectLiveKit(token);
+
+    // Создаём контейнер для жестов/канваса, если его нет
+    let stageEl = document.getElementById('zoomStage');
+    if (!stageEl){
+      try{
+        const tiles = document.querySelector('.tiles');
+        if (tiles){
+          stageEl = document.createElement('div');
+          stageEl.id = 'zoomStage';
+          tiles.appendChild(stageEl);
+        }
+      }catch{}
+    }
+
+    // Запускаем публикацию апскейленного видео через canvas
+    try{
+      const up = await startUpscaledVideoPublish({
+        // room опционален — модуль возьмёт ctx.room по умолчанию
+        fps: 30, width: 1280, height: 720,
+        gestureEl: stageEl || undefined,
+        mountEl: stageEl || undefined,
+        background: '#000',
+        renderEveryNFrames: 1,
+        debug: false,
+      });
+      try{ window.videoUpscale = up; }catch{}
+    }catch(e){ console.warn('[upscale] init failed:', e); }
 
     hide('screen-auth'); show('screen-app');
     byId('roomTag').textContent='Комната #'+state.me.room;

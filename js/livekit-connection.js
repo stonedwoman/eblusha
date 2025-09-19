@@ -151,6 +151,16 @@ export async function connectLiveKit(token){
   });
 
   ctx.room.on(RoomEvent.ConnectionQualityChanged, (p,q)=>{
+    try{
+      // Обновим бейдж качества аудио/сети рядом с именем участника
+      const tileName = document.querySelector(`.tile[data-pid="${CSS.escape(p.identity)}"] .name`);
+      if (tileName){
+        let aq = tileName.querySelector('.aq');
+        if (!aq){ aq = document.createElement('span'); aq.className='aq'; tileName.appendChild(aq); }
+        const label = q===3?'Excellent': q===2?'Good': q===1?'Poor': '—';
+        aq.textContent = label;
+      }
+    }catch{}
     if(p?.isLocal) setQualityIndicator(q);
   });
 

@@ -39,6 +39,8 @@ function formatPLabel(w, h){
 }
 function setQualityBadge(tile, w, h){
   if (!tile) return;
+  const label = formatPLabel(w, h);
+  // Top-right badge (если используется)
   let b = tile.querySelector('.q-badge');
   if (!b){
     b = document.createElement('div');
@@ -46,7 +48,18 @@ function setQualityBadge(tile, w, h){
     b.textContent = '';
     tile.appendChild(b);
   }
-  b.textContent = formatPLabel(w, h);
+  b.textContent = label;
+  // В подписи .name также показываем p
+  const name = tile.querySelector('.name');
+  if (name){
+    let q = name.querySelector('.q');
+    if (!q){
+      q = document.createElement('span');
+      q.className = 'q';
+      name.appendChild(q);
+    }
+    q.textContent = label;
+  }
 }
 
 // Безопасная обёртка для fitSpotlightSize
