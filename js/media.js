@@ -352,16 +352,18 @@ export async function toggleFacing(){
       }catch{}
       const prefs = captureCurrentVideoPrefs();
       const base = { facingMode: nextFacing };
-      const withPrefs = isMobileUA()
-        ? { ...base,
-            ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-          }
-        : { ...base,
-            ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-            ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-            ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-          };
-      await ctx.localVideoTrack.restartTrack(withPrefs);
+      const withPrefsMobileExact = { ...base, ...(prefs.aspectRatio ? { aspectRatio: { exact: prefs.aspectRatio } } : {}) };
+      const withPrefsMobileIdeal = { ...base, ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {}) };
+      const withPrefsDesktop     = { ...base,
+        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
+        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
+        ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {}) };
+      if (isMobileUA()){
+        try{ await ctx.localVideoTrack.restartTrack(withPrefsMobileExact); }
+        catch{ await ctx.localVideoTrack.restartTrack(withPrefsMobileIdeal); }
+      } else {
+        await ctx.localVideoTrack.restartTrack(withPrefsDesktop);
+      }
       // гарантируем, что паблиш не остался в mute
       try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
       state.settings.camFacing = nextFacing;
