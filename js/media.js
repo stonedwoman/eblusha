@@ -179,34 +179,6 @@ export async function ensureCameraOn(){
   const lp = ctx.room?.localParticipant;
   const devId = state.settings.camDevice || await pickCameraDevice(state.settings.camFacing||"user");
 
-  // Prefer SDK helper if available (lets browser choose sensible defaults)
-  try{
-    if (typeof lp?.setCameraEnabled === "function"){
-      await lp.setCameraEnabled(true, {
-        videoCaptureDefaults: {
-          deviceId: devId || undefined
-        }
-      });
-      const pubNow = camPub();
-      const trackNow = pubNow?.track || null;
-      if (trackNow){
-        ctx.localVideoTrack = trackNow;
-        attachVideoToTile(trackNow, ctx.room.localParticipant.identity, true);
-        window.requestAnimationFrame(applyCamTransformsToLive);
-        setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-        const arTick = ()=>{
-          const v = getLocalTileVideo();
-          if (!v) return;
-          const tile = v.closest('.tile');
-          if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
-        };
-        const ticks = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
-        ticks.forEach(ms=> setTimeout(arTick, ms));
-        camBusy = false; return;
-      }
-    }
-  }catch(e){ console.warn("setCameraEnabled failed, fallback", e); }
-
   // Fallback: manual track creation with minimal constraints
   const constraints = devId ? { deviceId:{ exact: devId } } : {};
   const old = ctx.localVideoTrack || camPub()?.track || null;
@@ -290,30 +262,22 @@ export async function toggleCam(){
   try{
     const lp = ctx.room.localParticipant;
     const targetOn = !isCamActuallyOn();
-    if (typeof lp?.setCameraEnabled === "function"){
-      await lp.setCameraEnabled(targetOn, {
-        videoCaptureDefaults:{
-          deviceId: state.settings.camDevice||undefined
-        }
-      });
+    let pub = camPub();
+    if (!pub){
+      if (targetOn){
+        try{ await ensureCameraOn(); }catch{}
+        pub = camPub();
+      }
     } else {
-      let pub = camPub();
-      if (!pub){
-        if (targetOn){
-          try{ await ensureCameraOn(); }catch(e){}
-          pub = camPub();
-        }
+      if (targetOn){
+        if (typeof pub.unmute === "function")      await pub.unmute();
+        else if (typeof pub.setMuted === "function") await pub.setMuted(false);
+        else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
       } else {
-        if (targetOn){
-          if (typeof pub.unmute === "function")      await pub.unmute();
-          else if (typeof pub.setMuted === "function") await pub.setMuted(false);
-          else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
-        } else {
-          if (typeof pub.mute === "function")         await pub.mute();
-          else if (typeof pub.setMuted === "function") await pub.setMuted(true);
-          else if (pub.track?.setEnabled)              pub.track.setEnabled(false);
-          showAvatarInTile(lp.identity);
-        }
+        if (typeof pub.mute === "function")         await pub.mute();
+        else if (typeof pub.setMuted === "function") await pub.setMuted(true);
+        else if (pub.track?.setEnabled)              pub.track.setEnabled(false);
+        showAvatarInTile(lp.identity);
       }
     }
     applyLayout();
