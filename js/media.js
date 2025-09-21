@@ -256,58 +256,94 @@ export async function toggleFacing(){
   const nextFacing = prevFacing === "user" ? "environment" : "user";
 
   try{
-    // Только мягкий путь — restartTrack, без фолбэков
-    if (!(ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function")){
-      throw new Error("restartTrack недоступен для текущего локального видео-трека");
-    }
-    // freeze AR while switching
-    try{
-      const v0 = getLocalTileVideo();
-      const tile0 = v0?.closest('.tile');
-      if (v0 && tile0){
-        const ar0 = (v0.videoWidth>0 && v0.videoHeight>0) ? (v0.videoWidth/v0.videoHeight) : (tile0.classList.contains('portrait')? (9/16):(16/9));
-        tile0.dataset.freezeAr = String(ar0);
+    // Фолбэк: полная замена трека на выбранное устройство/направление
+    const replaceWithNewTrack = async ()=>{
+      state.settings.camFacing = nextFacing;
+      state.settings.camDevice = "";
+      const pickedDev = await pickCameraDevice(nextFacing);
+      const constraints = pickedDev ? { deviceId:{ exact: pickedDev } }
+                                    : { facingMode:{ exact: nextFacing } };
+      const newTrack = await createLocalVideoTrack(constraints);
+      const meId = ctx.room.localParticipant.identity;
+      const pub = camPub();
+      if (pub){
+        await pub.replaceTrack(newTrack);
+        try{ ctx.localVideoTrack?.stop?.(); }catch{}
+        try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{}
+      } else {
+        await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
       }
-    }catch{}
-    // передаём предпочтительные размеры/AR, чтобы избежать отката в 4:3
-    const prefs = captureCurrentVideoPrefs();
-    const picked = await pickCameraDevice(nextFacing);
-    const buildOpts = (mode)=>{
-      const o = { facingMode: mode };
-      if (picked) o.deviceId = { exact: picked };
-      if (prefs?.width)       o.width       = { exact: prefs.width };
-      if (prefs?.height)      o.height      = { exact: prefs.height };
-      if (prefs?.aspectRatio) o.aspectRatio = { exact: prefs.aspectRatio };
-      return o;
+      ctx.localVideoTrack = newTrack;
+      attachVideoToTile(newTrack, meId, true);
+      applyCamTransformsToLive();
+      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+      const arTick = ()=>{
+        const v = getLocalTileVideo();
+        if (!v) return;
+        const tile = v.closest('.tile');
+        if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
+      };
+      [80,180,320,600,1000].forEach(ms=> setTimeout(arTick, ms));
     };
-    // Пытаемся строго сохранить параметры; если не получится — ослабим до ideal
-    try{
-      await ctx.localVideoTrack.restartTrack(buildOpts(nextFacing));
-    }catch{
-      const o = { facingMode: nextFacing };
-      if (picked) o.deviceId = { exact: picked };
-      if (prefs?.width)       o.width       = { ideal: prefs.width };
-      if (prefs?.height)      o.height      = { ideal: prefs.height };
-      if (prefs?.aspectRatio) o.aspectRatio = { ideal: prefs.aspectRatio };
-      await ctx.localVideoTrack.restartTrack(o);
-    }
-    try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
-    state.settings.camFacing = nextFacing;
-    // дёрнем стабилизацию AR/раскладки как при замене трека
-    setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-    window.requestAnimationFrame(()=>{
-      const v = getLocalTileVideo();
-      if (v){
-        const tile = v.closest(".tile");
-        if (tile) tile.classList.toggle("portrait", v.videoHeight>v.videoWidth);
-        applyCamTransformsToLive();
-        const unfreeze = ()=>{ try{ delete tile.dataset.freezeAr; }catch{} };
-        setTimeout(unfreeze, 300);
-        setTimeout(unfreeze, 800);
-        setTimeout(unfreeze, 1600);
+
+    let restartedOk = false;
+    if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === 'function'){
+      // freeze AR while switching
+      try{
+        const v0 = getLocalTileVideo();
+        const tile0 = v0?.closest('.tile');
+        if (v0 && tile0){
+          const ar0 = (v0.videoWidth>0 && v0.videoHeight>0) ? (v0.videoWidth/v0.videoHeight) : (tile0.classList.contains('portrait')? (9/16):(16/9));
+          tile0.dataset.freezeAr = String(ar0);
+        }
+      }catch{}
+      // передаём предпочтительные размеры/AR, чтобы избежать 4:3
+      const prefs = captureCurrentVideoPrefs();
+      const picked = await pickCameraDevice(nextFacing);
+      const strict = { facingMode: nextFacing };
+      if (picked) strict.deviceId = { exact: picked };
+      if (prefs?.width)       strict.width       = { exact: prefs.width };
+      if (prefs?.height)      strict.height      = { exact: prefs.height };
+      if (prefs?.aspectRatio) strict.aspectRatio = { exact: prefs.aspectRatio };
+      try{
+        await ctx.localVideoTrack.restartTrack(strict);
+        restartedOk = true;
+      }catch{
+        const soft = { facingMode: nextFacing };
+        if (picked) soft.deviceId = { exact: picked };
+        if (prefs?.width)       soft.width       = { ideal: prefs.width };
+        if (prefs?.height)      soft.height      = { ideal: prefs.height };
+        if (prefs?.aspectRatio) soft.aspectRatio = { ideal: prefs.aspectRatio };
+        try{ await ctx.localVideoTrack.restartTrack(soft); restartedOk = true; }catch{}
       }
-    });
-    applyLayout();
+      try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
+      state.settings.camFacing = nextFacing;
+      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+      window.requestAnimationFrame(()=>{
+        const v = getLocalTileVideo();
+        if (v){
+          const tile = v.closest('.tile');
+          if (tile) tile.classList.toggle('portrait', v.videoHeight>v.videoWidth);
+          applyCamTransformsToLive();
+          const unfreeze = ()=>{ try{ delete tile.dataset.freezeAr; }catch{} };
+          setTimeout(unfreeze, 300);
+          setTimeout(unfreeze, 800);
+          setTimeout(unfreeze, 1600);
+        }
+      });
+      applyLayout();
+
+      // Проверим результат; если всё ещё фронталка/не тот девайс — fallback замена
+      try{
+        const s = ctx.localVideoTrack?.mediaStreamTrack?.getSettings?.() || {};
+        const okFacing = s.facingMode ? (s.facingMode === nextFacing) : null;
+        const okDevice = picked ? (s.deviceId === picked) : null;
+        const looksWrong = (okFacing === false) || (okDevice === false);
+        if (!restartedOk || looksWrong){ await replaceWithNewTrack(); }
+      }catch{ await replaceWithNewTrack(); }
+    } else {
+      await replaceWithNewTrack();
+    }
   }catch(e){
     state.settings.camFacing = prevFacing;
     alert("Не удалось переключить камеру: " + (e?.message||e));
