@@ -234,16 +234,48 @@ async function trySwitchFacingOnSameTrack(newFacing){
     if (caps.facingMode && Array.isArray(caps.facingMode) && !caps.facingMode.includes(newFacing)){
       return false;
     }
-    try { await mst.applyConstraints({ facingMode: { exact: newFacing } }); }
-    catch { await mst.applyConstraints({ facingMode: newFacing }); }
+
+    // Preserve current prefs (width/height/aspectRatio) to avoid 4:3 fallback
+    let w, h, ar;
+    try{
+      const s = mst.getSettings?.() || {};
+      w = s.width|0; h = s.height|0; ar = (w>0 && h>0) ? (w/h) : undefined;
+      if (!ar){
+        const v = getLocalTileVideo();
+        const vw = v?.videoWidth|0, vh = v?.videoHeight|0;
+        if (vw>0 && vh>0){ w = w||vw; h = h||vh; ar = vw/vh; }
+      }
+    }catch{}
+
+    // Try exact first, then ideal, then only facingMode
+    try {
+      await mst.applyConstraints({
+        facingMode: { exact: newFacing },
+        ...(w ? { width: { exact: w } } : {}),
+        ...(h ? { height: { exact: h } } : {}),
+        ...(ar? { aspectRatio: { exact: ar } } : {})
+      });
+    } catch {
+      try {
+        await mst.applyConstraints({
+          facingMode: { ideal: newFacing },
+          ...(w ? { width: { ideal: w } } : {}),
+          ...(h ? { height: { ideal: h } } : {}),
+          ...(ar? { aspectRatio: { ideal: ar } } : {})
+        });
+      } catch {
+        try { await mst.applyConstraints({ facingMode: { exact: newFacing } }); }
+        catch { await mst.applyConstraints({ facingMode: newFacing }); }
+      }
+    }
 
     const v = getLocalTileVideo();
     if (v){
       const tile = v.closest(".tile");
       setTimeout(()=> {
         // поправим класс портрет/альбом
-        const w = v.videoWidth, h = v.videoHeight;
-        tile?.classList.toggle("portrait", h>w);
+        const W = v.videoWidth, H = v.videoHeight;
+        tile?.classList.toggle("portrait", H>W);
         applyCamTransformsToLive();
       }, 0);
     }
