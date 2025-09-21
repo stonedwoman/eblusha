@@ -188,14 +188,14 @@
   }
 
   .tiles-main {
-    position: relative;
+    position: relative;           /* база для absolute-детей */
     min-height: 0;
     overflow: hidden;
     -webkit-overflow-scrolling: auto;
     overscroll-behavior: contain;
     touch-action: auto;
-    display: grid;
-    gap: var(--tile-gap);
+    display: block;               /* убираем grid/flex */
+    gap: 0;
     height: 100%;
     width: 100%;
     min-width: 0;

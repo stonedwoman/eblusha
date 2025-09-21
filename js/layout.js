@@ -28,46 +28,8 @@ const impl = {
   },
 
   applyLayout() {
-    try{
-      const tiles = document.getElementById('tiles');
-      const main  = document.getElementById('tilesMain');
-      const rail  = document.getElementById('tilesRail');
-      if (!main) return;
-
-      // 1) вернуть все тайлы в основной контейнер
-      const allTiles = Array.from(document.querySelectorAll('.tile'));
-      allTiles.forEach(t=>{
-        t.classList.remove('spotlight','thumb');
-        t.style.width=''; t.style.height='';
-        if (t.parentElement !== main) main.appendChild(t);
-      });
-      if (tiles){ tiles.classList.remove('spotlight'); tiles.classList.toggle('single', allTiles.length<=1); }
-      if (rail){ rail.innerHTML=''; }
-
-      // 2) простая грид-сетка: подберём число колонок под 16:9, чтобы увеличивать площадь
-      const box = main.getBoundingClientRect();
-      const N = Math.max(0, main.querySelectorAll('.tile').length);
-      const best = (function bestGrid(n, W, H, ar){
-        ar = ar || (16/9);
-        let res={ rows:1, cols: Math.max(1,n), score:0 };
-        for(let cols=1; cols<=Math.max(1, Math.min(n, 6)); cols++){
-          const rows = Math.ceil(n/cols);
-          const w = W/cols, h = H/rows;
-          const size = Math.min(w, h/ar);
-          if(size > res.score) res = { rows, cols, score:size };
-        }
-        return res;
-      })(N, Math.max(1, box.width), Math.max(1, box.height), 16/9);
-
-      main.style.display = 'grid';
-      main.style.gridTemplateColumns = `repeat(${Math.max(1, best.cols||1)}, 1fr)`;
-      // задаём явную высоту строк для видимости контента
-      const rows = Math.max(1, Math.ceil(N / Math.max(1, best.cols||1)));
-      const rowH = Math.floor(box.height / rows);
-      main.style.gridAutoRows = `${rowH}px`;
-    } finally {
-      emitResize(); impl.queueSbarUpdate();
-    }
+    // небольшой «пинок» в следующий кадр
+    raf(() => { emitResize(); impl.queueSbarUpdate(); });
   },
 
   queueSbarUpdate() {
@@ -192,8 +154,47 @@ let profileLoaded = false;
 let profileLoading = false;
 
 function loadProfile() {
-  // Профили отключены: используем простую грид-сетку из impl.applyLayout
-  profileLoaded = true; profileLoading = false;
+  if (profileLoaded || profileLoading) return;
+  profileLoading = true;
+  
+  try {
+    const profilePath = pickProfilePath();
+    console.log('Loading layout profile:', profilePath);
+    
+    // Используем динамический импорт, но ждём его завершения
+    import(profilePath).then(mod => {
+      console.log('Layout profile loaded:', profilePath);
+      
+      // В профильных файлах могут быть частичные реализации — аккуратно подменяем имеющиеся
+      [
+        "fitSpotlightSize", "applyLayout", "queueSbarUpdate",
+        "updateMobileScrollbar", "updateUsersCounter", "highlightSpeaking"
+      ].forEach(k => {
+        if (typeof mod[k] === "function") {
+          impl[k] = mod[k];
+          console.log(`Layout function ${k} loaded`);
+        }
+      });
+      
+      // Вызываем initLayout если он есть в модуле
+      if (typeof mod.initLayout === "function") {
+        console.log('Calling initLayout from profile');
+        mod.initLayout();
+      }
+      
+      profileLoaded = true;
+      profileLoading = false;
+    }).catch(e => {
+      console.warn('Failed to load layout profile:', e);
+      // если профиль не загрузился — остаёмся на дефолтных реализациях
+      profileLoaded = true;
+      profileLoading = false;
+    });
+  } catch (e) {
+    console.error('Error loading profile:', e);
+    profileLoaded = true;
+    profileLoading = false;
+  }
 }
 
 // Запускаем загрузку сразу
