@@ -173,6 +173,9 @@ export async function pickCameraDevice(facing){
 }
 
 export async function ensureCameraOn(){
+  if (!ctx.room) return;
+  if (camBusy) return; // защита от повторного входа/зацикливания
+  camBusy = true;
   const lp = ctx.room?.localParticipant;
   const devId = state.settings.camDevice || await pickCameraDevice(state.settings.camFacing||"user");
 
@@ -199,7 +202,7 @@ export async function ensureCameraOn(){
         };
         const ticks = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
         ticks.forEach(ms=> setTimeout(arTick, ms));
-        return;
+        camBusy = false; return;
       }
     }
   }catch(e){ console.warn("setCameraEnabled failed, fallback", e); }
@@ -228,6 +231,7 @@ export async function ensureCameraOn(){
   };
   const ticks = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
   ticks.forEach(ms=> setTimeout(arTick, ms));
+  camBusy = false;
 }
 
 async function trySwitchFacingOnSameTrack(newFacing){
@@ -296,7 +300,10 @@ export async function toggleCam(){
     } else {
       let pub = camPub();
       if (!pub){
-        if (targetOn){ await ensureCameraOn(); pub = camPub(); }
+        if (targetOn){
+          try{ await ensureCameraOn(); }catch(e){}
+          pub = camPub();
+        }
       } else {
         if (targetOn){
           if (typeof pub.unmute === "function")      await pub.unmute();
