@@ -239,8 +239,7 @@ async function trySwitchFacingOnSameTrack(newFacing){
   const lkTrack = pub?.track || ctx.localVideoTrack;
   const mst = lkTrack?.mediaStreamTrack;
   if (!mst || typeof mst.applyConstraints !== "function") return false;
-  // На мобильных применяем фолбэк с новым треком — applyConstraints/restart часто ломают публикацию
-  if (isMobileUA()) return false;
+  // Пытаемся мягко переключить даже на мобильных; фолбэк сделаем выше при ошибке
 
   try{
     const caps = mst.getCapabilities?.() || {};
@@ -331,13 +330,7 @@ byId("btnCam")?.addEventListener("click", toggleCam);
 /* ===== Переключение фронт/тыл ===== */
 export async function toggleFacing(){
   if(!ctx.room || !isCamActuallyOn() || camBusy) return;
-  try{
-    const n = await countVideoInputs();
-    if (n < 2){
-      // нет второй камеры — игнорируем запрос переключения, чтобы не сбивать AR
-      return;
-    }
-  }catch{}
+  // не ограничиваемся числом камер: многие мобильные отдают 1 device, но поддерживают facingMode
   camBusy = true;
   ctx._camSwitching = true;
   const btn = byId("btnFacing"); if (btn) btn.disabled = true;
@@ -347,7 +340,7 @@ export async function toggleFacing(){
 
   try{
     // 1) мягкий путь — restartTrack, если есть
-    if (!isMobileUA() && ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
+    if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
       // freeze AR while switching
       try{
         const v0 = getLocalTileVideo();
@@ -358,12 +351,14 @@ export async function toggleFacing(){
         }
       }catch{}
       const prefs = captureCurrentVideoPrefs();
-      await ctx.localVideoTrack.restartTrack({
-        facingMode: nextFacing,
+      const base = { facingMode: nextFacing };
+      const withPrefs = isMobileUA() ? base : {
+        ...base,
         ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
         ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
         ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-      });
+      };
+      await ctx.localVideoTrack.restartTrack(withPrefs);
       // гарантируем, что паблиш не остался в mute
       try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
       state.settings.camFacing = nextFacing;
@@ -381,7 +376,7 @@ export async function toggleFacing(){
       });
     }
     // 2) applyConstraints
-    else if (!isMobileUA() && await trySwitchFacingOnSameTrack(nextFacing)){
+    else if (await trySwitchFacingOnSameTrack(nextFacing)){
       // ok
     }
     // 3) Фолбэк — новый трек
