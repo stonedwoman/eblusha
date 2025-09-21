@@ -137,6 +137,8 @@ export async function applySettingsFromModal(closeAfter){
       // локальная плитка
       applyCamTransformsToLive();
       applyLayout();
+      // Старт стабильной перераскладки, чтобы формат соответствовал реальному потоку
+      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
     }
   }catch(e){ console.warn("cam replace error", e); }
 
