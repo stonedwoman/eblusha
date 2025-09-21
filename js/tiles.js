@@ -183,10 +183,16 @@ export function createTileEl(identity, name, isLocal){
     <div class="placeholder"><div class="avatar-ph">${name.slice(0,1).toUpperCase()}</div></div>
     <div class="name">${name}${isLocal?' (ты)':''}</div>
     ${vol}
+    <button class="fs-btn" data-act="fs" title="Во весь экран">⛶</button>
     <div class="controls"><button class="ctrl" data-act="pin" title="В спотлайт">⭐</button></div>`;
 
   el.addEventListener('click', (e)=>{
     const act = e.target?.dataset?.act;
+    if(act==='fs'){
+      try{ openTileOverlay(el); }catch{}
+      e.stopPropagation();
+      return;
+    }
     if(act==='pin'){
       ctx.pinnedId = (ctx.pinnedId===identity ? null : identity);
       e.stopPropagation();

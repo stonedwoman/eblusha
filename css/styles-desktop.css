@@ -83,6 +83,16 @@ body.no-scroll{overflow:hidden}
 .ctrl{padding:8px 10px; border-radius:10px; border:1px solid var(--line); background:var(--panel); cursor:pointer}
 .tile.speaking{outline:2px solid var(--success); box-shadow:0 0 0 2px rgba(59,165,92,.3) inset}
 
+/* Per-tile fullscreen button */
+.tile .fs-btn{
+  position:absolute; right:8px; top:8px; z-index:3;
+  width:34px; height:34px; display:grid; place-items:center;
+  border:1px solid var(--line); background:#1f2329; color:#fff; border-radius:10px;
+  cursor:pointer; opacity:.0; transition:opacity .2s ease;
+}
+.tile.has-video:hover .fs-btn{ opacity:1; }
+.tile:not(.has-video) .fs-btn{ display:none; }
+
 /* Volume */
 .vol{position:absolute; right:10px; bottom:10px; z-index:2; display:flex; align-items:center; gap:6px; background:rgba(0,0,0,.45); border-radius:8px; padding:4px 6px; backdrop-filter:blur(6px)}
 .vol input[type=range]{width:90px}

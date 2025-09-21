@@ -73,6 +73,13 @@ html, body{
 .tile .controls{display:none !important}
 /* было: object-fit: cover; */
 .tile video { width:100%; height:100%; object-fit: contain !important; object-position:center; }
+.tile .fs-btn{
+  position:absolute; right:6px; top:6px; z-index:3;
+  width:30px; height:30px; display:grid; place-items:center;
+  border:1px solid var(--line); background:#1f2329; color:#fff; border-radius:8px;
+  cursor:pointer; opacity:.9;
+}
+.tile:not(.has-video) .fs-btn{ display:none; }
 .mini-dlg{ position:fixed; inset:0; z-index:1200; display:none; }
 .mini-dlg.open{ display:block; }
 .mini-dlg .mini-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.45); backdrop-filter: blur(4px); }
