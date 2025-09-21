@@ -371,11 +371,6 @@ export async function toggleFacing(){
           ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
         });
       }
-      // гарантированно размутаем публикацию после рестарта
-      try{
-        const pub = camPub();
-        if (pub){ await (pub.setMuted?.(false) || pub.unmute?.()); pub.track?.setEnabled?.(true); }
-      }catch{}
       state.settings.camFacing = nextFacing;
       window.requestAnimationFrame(()=>{
         const v = getLocalTileVideo();
@@ -422,7 +417,6 @@ export async function toggleFacing(){
       if (pub) {
         await pub.replaceTrack(newTrack);
         try { ctx.localVideoTrack?.stop(); } catch {}
-        try{ await (pub.setMuted?.(false) || pub.unmute?.()); pub.track?.setEnabled?.(true); }catch{}
       } else {
         await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
       }
