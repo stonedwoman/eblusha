@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Test: minimal LiveKit join + screen + camera</title>
+  <style>
+    body{ margin:0; font:14px/1.4 system-ui, -apple-system, Segoe UI, Inter, Roboto, sans-serif; background:#111; color:#eee; }
+    .wrap{ padding:12px; display:grid; gap:12px; }
+    .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .btn{ padding:8px 12px; border:1px solid #444; background:#1e1f22; color:#fff; border-radius:8px; cursor:pointer; }
+    .btn:disabled{ opacity:.6; cursor:default; }
+    .tag{ background:#2a2d31; border:1px solid #3a3d43; padding:4px 8px; border-radius:999px; font-size:12px; }
+    .grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:12px; }
+    .card{ background:#1a1b1e; border:1px solid #2b2f36; border-radius:10px; padding:10px; display:grid; gap:10px; }
+    video{ width:100%; height:320px; background:#000; object-fit:contain; transform:none !important; }
+    .log{ white-space:pre-wrap; font-family:ui-monospace, Menlo, Consolas, monospace; background:#0b0b0c; border:1px solid #222; padding:8px; border-radius:8px; max-height:200px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <span class="tag" id="status">Статус: —</span>
+      <span class="tag" id="meTag">—</span>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnStartScreen">Включить экран (без аудио)</button>
+      <button class="btn" id="btnStartCam">Включить камеру</button>
+      <button class="btn" id="btnToggleFacing">Развернуть камеру</button>
+      <button class="btn" id="btnStopCam">Выключить камеру</button>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="tag">Камера (локальный предпросмотр)</div>
+        <video id="camVideo" playsinline autoplay muted></video>
+      </div>
+      <div class="card">
+        <div class="tag">Экран (локальный предпросмотр)</div>
+        <video id="screenVideo" playsinline autoplay muted></video>
+      </div>
+    </div>
+    <div class="card">
+      <div class="tag">Логи</div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+  <script type="module" src="./js/test-min.js"></script>
+</body>
+</html>
+
+
