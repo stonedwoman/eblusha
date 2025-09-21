@@ -343,85 +343,84 @@ export async function toggleFacing(){
   const nextFacing = prevFacing === "user" ? "environment" : "user";
 
   try{
-    // 1) мягкий путь — restartTrack, если есть
-    if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
-      // freeze AR while switching
-      try{
-        const v0 = getLocalTileVideo();
-        const tile0 = v0?.closest('.tile');
-        if (v0 && tile0){
-          const ar0 = (v0.videoWidth>0 && v0.videoHeight>0) ? (v0.videoWidth/v0.videoHeight) : (tile0.classList.contains('portrait')? (9/16):(16/9));
-          tile0.dataset.freezeAr = String(ar0);
-        }
-      }catch{}
-      const prefs = captureCurrentVideoPrefs();
-      await ctx.localVideoTrack.restartTrack({
-        facingMode: nextFacing,
-        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-        ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-      });
-      state.settings.camFacing = nextFacing;
-      window.requestAnimationFrame(()=>{
-        const v = getLocalTileVideo();
-        if (v){
-          const tile = v.closest(".tile");
-          if (tile) tile.classList.toggle("portrait", v.videoHeight>v.videoWidth);
-          applyCamTransformsToLive();
-          const unfreeze = ()=>{ try{ delete tile.dataset.freezeAr; }catch{} };
-          setTimeout(unfreeze, 300);
-          setTimeout(unfreeze, 800);
-          setTimeout(unfreeze, 1600);
-        }
-      });
-    }
-    // 2) applyConstraints
-    else if (await trySwitchFacingOnSameTrack(nextFacing)){
-      // ok
-    }
-    // 3) Фолбэк — новый трек
-    else {
-      state.settings.camFacing = nextFacing;
-      state.settings.camDevice = ""; // дать браузеру выбрать
+    // Всегда пересоздаём трек с явным deviceId и сохранением размеров/AR,
+    // так стабильнее на мобильных и меньше шансов отката в 4:3
+    state.settings.camFacing = nextFacing;
+    state.settings.camDevice = ""; // дать выбрать заново
 
-      const picked = await pickCameraDevice(nextFacing);
-      const prefs = captureCurrentVideoPrefs();
-      const constraints = picked ? { deviceId: { exact: picked },
-                                     ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-                                     ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-                                     ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-                                   }
-                                 : { facingMode: { ideal: nextFacing },
-                                     ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-                                     ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-                                     ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-                                   };
-      const newTrack = await createLocalVideoTrack(constraints);
-      const meId = ctx.room.localParticipant.identity;
-      const pub = camPub();
-
-      attachVideoToTile(newTrack, meId, true);
-
-      if (pub) {
-        await pub.replaceTrack(newTrack);
-        try { ctx.localVideoTrack?.stop(); } catch {}
-      } else {
-        await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
+    // freeze AR while switching for layout stability
+    try{
+      const v0 = getLocalTileVideo();
+      const tile0 = v0?.closest('.tile');
+      if (v0 && tile0){
+        const ar0 = (v0.videoWidth>0 && v0.videoHeight>0) ? (v0.videoWidth/v0.videoHeight) : (tile0.classList.contains('portrait')? (9/16):(16/9));
+        tile0.dataset.freezeAr = String(ar0);
       }
+    }catch{}
 
-      ctx.localVideoTrack = newTrack;
-      applyCamTransformsToLive();
-      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-      // форс-обновление AR локального видео после смены facing
-      const arTick2 = ()=>{
-        const v = getLocalTileVideo();
-        if (!v) return;
-        const tile = v.closest('.tile');
-        if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
+    const picked = await pickCameraDevice(nextFacing);
+    const prefs  = captureCurrentVideoPrefs();
+    const targetW = prefs.width  || 1280;
+    const targetH = prefs.height || 720;
+    const targetAR = prefs.aspectRatio || (targetW/targetH);
+
+    let constraints = picked ? {
+      deviceId: { exact: picked },
+      width:  { exact: targetW },
+      height: { exact: targetH },
+      aspectRatio: { exact: targetAR }
+    } : {
+      facingMode: { ideal: nextFacing },
+      width:  { exact: targetW },
+      height: { exact: targetH },
+      aspectRatio: { exact: targetAR }
+    };
+
+    let newTrack = null;
+    try{
+      newTrack = await createLocalVideoTrack(constraints);
+    }catch{
+      // Fallback to ideal sizes
+      constraints = picked ? {
+        deviceId: { exact: picked },
+        width:  { ideal: targetW },
+        height: { ideal: targetH },
+        aspectRatio: { ideal: targetAR }
+      } : {
+        facingMode: { ideal: nextFacing },
+        width:  { ideal: targetW },
+        height: { ideal: targetH },
+        aspectRatio: { ideal: targetAR }
       };
-      const ticks2 = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
-      ticks2.forEach(ms=> setTimeout(arTick2, ms));
+      newTrack = await createLocalVideoTrack(constraints);
     }
+
+    const meId = ctx.room.localParticipant.identity;
+    const pub = camPub();
+
+    attachVideoToTile(newTrack, meId, true);
+
+    if (pub) {
+      await pub.replaceTrack(newTrack);
+      try { ctx.localVideoTrack?.stop(); } catch {}
+    } else {
+      await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
+    }
+
+    ctx.localVideoTrack = newTrack;
+    applyCamTransformsToLive();
+    setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+
+    const arTick2 = ()=>{
+      const v = getLocalTileVideo();
+      if (!v) return;
+      const tile = v.closest('.tile');
+      if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
+      // remove freeze
+      try{ delete tile.dataset.freezeAr; }catch{}
+    };
+    const ticks2 = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
+    ticks2.forEach(ms=> setTimeout(arTick2, ms));
 
     applyLayout();
   }catch(e){
