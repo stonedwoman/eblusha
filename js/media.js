@@ -321,18 +321,8 @@ export async function toggleFacing(){
       }catch{}
       const prefs = captureCurrentVideoPrefs();
       const base = { facingMode: nextFacing };
-      const withPrefsMobileExact = { ...base, ...(prefs.aspectRatio ? { aspectRatio: { exact: prefs.aspectRatio } } : {}) };
-      const withPrefsMobileIdeal = { ...base, ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {}) };
-      const withPrefsDesktop     = { ...base,
-        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-        ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {}) };
-      if (isMobileUA()){
-        try{ await ctx.localVideoTrack.restartTrack(withPrefsMobileExact); }
-        catch{ await ctx.localVideoTrack.restartTrack(withPrefsMobileIdeal); }
-      } else {
-        await ctx.localVideoTrack.restartTrack(withPrefsDesktop);
-      }
+      // как в тесте — минимум констрейнтов при рестарте
+      await ctx.localVideoTrack.restartTrack({ facingMode: nextFacing });
       // гарантируем, что паблиш не остался в mute
       try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
       state.settings.camFacing = nextFacing;
@@ -351,30 +341,16 @@ export async function toggleFacing(){
         }
       });
     }
-    // 2) applyConstraints
-    else if (await trySwitchFacingOnSameTrack(nextFacing)){
-      // ok
-      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-    }
+    // 2) (отключено) applyConstraints на исходном треке часто сбивает формат до 4:3 — пропускаем
     // 3) Фолбэк — новый трек
     else {
       state.settings.camFacing = nextFacing;
       state.settings.camDevice = ""; // дать браузеру выбрать
 
       const picked = await pickCameraDevice(nextFacing);
-      // На мобильных задаём только aspectRatio (ideal), чтобы удержать формат без риска циклов; на десктопе — также width/height.
-      const pr = captureCurrentVideoPrefs();
-      const baseConsMobile = {
-        ...(pr.aspectRatio ? { aspectRatio: { ideal: pr.aspectRatio } } : {})
-      };
-      const baseConsDesktop = {
-        ...(pr.width  ? { width:  { ideal: pr.width  } } : {}),
-        ...(pr.height ? { height: { ideal: pr.height } } : {}),
-        ...(pr.aspectRatio ? { aspectRatio: { ideal: pr.aspectRatio } } : {})
-      };
-      const baseCons = isMobileUA() ? baseConsMobile : baseConsDesktop;
-      const constraints = picked ? { deviceId: { exact: picked }, ...baseCons }
-                                 : { facingMode: { ideal: nextFacing }, ...baseCons };
+      // Минимальные констрейнты, как в тесте: только deviceId или facingMode
+      const constraints = picked ? { deviceId: { exact: picked } }
+                                 : { facingMode: { ideal: nextFacing } };
       const newTrack = await createLocalVideoTrack(constraints);
       const meId = ctx.room.localParticipant.identity;
       const pub = camPub();
