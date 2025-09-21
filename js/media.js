@@ -362,6 +362,8 @@ export async function toggleFacing(){
       // гарантируем, что паблиш не остался в mute
       try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
       state.settings.camFacing = nextFacing;
+      // дёрнем стабилизацию AR/раскладки как при замене трека
+      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
       window.requestAnimationFrame(()=>{
         const v = getLocalTileVideo();
         if (v){
@@ -378,6 +380,7 @@ export async function toggleFacing(){
     // 2) applyConstraints
     else if (await trySwitchFacingOnSameTrack(nextFacing)){
       // ok
+      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
     }
     // 3) Фолбэк — новый трек
     else {
