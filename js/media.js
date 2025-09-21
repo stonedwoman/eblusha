@@ -352,12 +352,15 @@ export async function toggleFacing(){
       }catch{}
       const prefs = captureCurrentVideoPrefs();
       const base = { facingMode: nextFacing };
-      const withPrefs = isMobileUA() ? base : {
-        ...base,
-        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-        ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-      };
+      const withPrefs = isMobileUA()
+        ? { ...base,
+            ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
+          }
+        : { ...base,
+            ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
+            ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
+            ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
+          };
       await ctx.localVideoTrack.restartTrack(withPrefs);
       // гарантируем, что паблиш не остался в mute
       try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
@@ -388,18 +391,19 @@ export async function toggleFacing(){
       state.settings.camDevice = ""; // дать браузеру выбрать
 
       const picked = await pickCameraDevice(nextFacing);
-      // На мобильных не задаём размеры/AR, чтобы избежать «мертвых» треков; на десктопе можно оставить ideal
-      const prefs = isMobileUA() ? { } : captureCurrentVideoPrefs();
-      const constraints = picked ? { deviceId: { exact: picked },
-                                     ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-                                     ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-                                     ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-                                   }
-                                 : { facingMode: { ideal: nextFacing },
-                                     ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-                                     ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-                                     ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-                                   };
+      // На мобильных задаём только aspectRatio (ideal), чтобы удержать формат без риска циклов; на десктопе — также width/height.
+      const pr = captureCurrentVideoPrefs();
+      const baseConsMobile = {
+        ...(pr.aspectRatio ? { aspectRatio: { ideal: pr.aspectRatio } } : {})
+      };
+      const baseConsDesktop = {
+        ...(pr.width  ? { width:  { ideal: pr.width  } } : {}),
+        ...(pr.height ? { height: { ideal: pr.height } } : {}),
+        ...(pr.aspectRatio ? { aspectRatio: { ideal: pr.aspectRatio } } : {})
+      };
+      const baseCons = isMobileUA() ? baseConsMobile : baseConsDesktop;
+      const constraints = picked ? { deviceId: { exact: picked }, ...baseCons }
+                                 : { facingMode: { ideal: nextFacing }, ...baseCons };
       const newTrack = await createLocalVideoTrack(constraints);
       const meId = ctx.room.localParticipant.identity;
       const pub = camPub();
