@@ -343,12 +343,7 @@ export async function toggleFacing(){
   const nextFacing = prevFacing === "user" ? "environment" : "user";
 
   try{
-    // Всегда пересоздаём трек с явным deviceId и сохранением размеров/AR,
-    // так стабильнее на мобильных и меньше шансов отката в 4:3
-    state.settings.camFacing = nextFacing;
-    state.settings.camDevice = ""; // дать выбрать заново
-
-    // freeze AR while switching for layout stability
+    // freeze AR while switching
     try{
       const v0 = getLocalTileVideo();
       const tile0 = v0?.closest('.tile');
@@ -358,69 +353,87 @@ export async function toggleFacing(){
       }
     }catch{}
 
-    const picked = await pickCameraDevice(nextFacing);
-    const prefs  = captureCurrentVideoPrefs();
-    const targetW = prefs.width  || 1280;
-    const targetH = prefs.height || 720;
-    const targetAR = prefs.aspectRatio || (targetW/targetH);
+    // 1) Мягкий путь — restartTrack c сохранением размеров/AR
+    if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
+      const prefs = captureCurrentVideoPrefs();
+      try{
+        await ctx.localVideoTrack.restartTrack({
+          facingMode: nextFacing,
+          ...(prefs.width  ? { width:  { exact: prefs.width  } } : {}),
+          ...(prefs.height ? { height: { exact: prefs.height } } : {}),
+          ...(prefs.aspectRatio ? { aspectRatio: { exact: prefs.aspectRatio } } : {})
+        });
+      }catch{
+        await ctx.localVideoTrack.restartTrack({
+          facingMode: nextFacing,
+          ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
+          ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
+          ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
+        });
+      }
+      state.settings.camFacing = nextFacing;
+      window.requestAnimationFrame(()=>{
+        const v = getLocalTileVideo();
+        if (v){
+          const tile = v.closest(".tile");
+          if (tile) tile.classList.toggle("portrait", v.videoHeight>v.videoWidth);
+          applyCamTransformsToLive();
+          const unfreeze = ()=>{ try{ delete tile.dataset.freezeAr; }catch{} };
+          setTimeout(unfreeze, 300);
+          setTimeout(unfreeze, 800);
+          setTimeout(unfreeze, 1600);
+        }
+      });
+    }
+    // 2) applyConstraints на текущем MST (улучшенный вариант внутри trySwitchFacingOnSameTrack)
+    else if (await trySwitchFacingOnSameTrack(nextFacing)){
+      // ok
+    }
+    // 3) Фолбэк — новый трек с deviceId и ideal-констрейнтами размеров/AR
+    else {
+      state.settings.camFacing = nextFacing;
+      state.settings.camDevice = ""; // дать браузеру выбрать
 
-    let constraints = picked ? {
-      deviceId: { exact: picked },
-      width:  { exact: targetW },
-      height: { exact: targetH },
-      aspectRatio: { exact: targetAR }
-    } : {
-      facingMode: { ideal: nextFacing },
-      width:  { exact: targetW },
-      height: { exact: targetH },
-      aspectRatio: { exact: targetAR }
-    };
-
-    let newTrack = null;
-    try{
-      newTrack = await createLocalVideoTrack(constraints);
-    }catch{
-      // Fallback to ideal sizes
-      constraints = picked ? {
+      const picked = await pickCameraDevice(nextFacing);
+      const prefs = captureCurrentVideoPrefs();
+      const constraints = picked ? {
         deviceId: { exact: picked },
-        width:  { ideal: targetW },
-        height: { ideal: targetH },
-        aspectRatio: { ideal: targetAR }
+        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
+        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
+        ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
       } : {
         facingMode: { ideal: nextFacing },
-        width:  { ideal: targetW },
-        height: { ideal: targetH },
-        aspectRatio: { ideal: targetAR }
+        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
+        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
+        ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
       };
-      newTrack = await createLocalVideoTrack(constraints);
+
+      const newTrack = await createLocalVideoTrack(constraints);
+      const meId = ctx.room.localParticipant.identity;
+      const pub = camPub();
+
+      attachVideoToTile(newTrack, meId, true);
+
+      if (pub) {
+        await pub.replaceTrack(newTrack);
+        try { ctx.localVideoTrack?.stop(); } catch {}
+      } else {
+        await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
+      }
+
+      ctx.localVideoTrack = newTrack;
+      applyCamTransformsToLive();
+      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+      const arTick2 = ()=>{
+        const v = getLocalTileVideo();
+        if (!v) return;
+        const tile = v.closest('.tile');
+        if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
+        try{ delete tile.dataset.freezeAr; }catch{}
+      };
+      const ticks2 = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
+      ticks2.forEach(ms=> setTimeout(arTick2, ms));
     }
-
-    const meId = ctx.room.localParticipant.identity;
-    const pub = camPub();
-
-    attachVideoToTile(newTrack, meId, true);
-
-    if (pub) {
-      await pub.replaceTrack(newTrack);
-      try { ctx.localVideoTrack?.stop(); } catch {}
-    } else {
-      await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
-    }
-
-    ctx.localVideoTrack = newTrack;
-    applyCamTransformsToLive();
-    setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-
-    const arTick2 = ()=>{
-      const v = getLocalTileVideo();
-      if (!v) return;
-      const tile = v.closest('.tile');
-      if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
-      // remove freeze
-      try{ delete tile.dataset.freezeAr; }catch{}
-    };
-    const ticks2 = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
-    ticks2.forEach(ms=> setTimeout(arTick2, ms));
 
     applyLayout();
   }catch(e){
