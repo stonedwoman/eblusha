@@ -44,37 +44,17 @@ export async function ensureMicOn(){
   if(!ctx.room) return;
   const lp = ctx.room.localParticipant;
   try{
-    if (typeof lp?.setMicrophoneEnabled === "function"){
-      await lp.setMicrophoneEnabled(true, {
-        audioCaptureDefaults:{
-          echoCancellation:state.settings.ec,
-          noiseSuppression:state.settings.ns,
-          autoGainControl:state.settings.agc,
-          deviceId: state.settings.micDevice||undefined
-        }
-      });
-      const pub = micPub();
-      ctx.localAudioTrack = pub?.track || ctx.localAudioTrack;
-      return;
-    }
-  }catch(e){ console.warn("setMicrophoneEnabled failed, fallback", e); }
-
-  const existing = micPub();
-  if (existing){
-    if (existing.isMuted) { await (existing.setMuted?.(false) || existing.unmute?.()); }
-    ctx.localAudioTrack = existing.track || ctx.localAudioTrack;
-    return;
-  }
-  try{
-    const track = await createLocalAudioTrack({
-      echoCancellation:state.settings.ec,
-      noiseSuppression:state.settings.ns,
-      autoGainControl:state.settings.agc,
-      deviceId: state.settings.micDevice||undefined
+    await lp.setMicrophoneEnabled(true, {
+      audioCaptureDefaults:{
+        echoCancellation:state.settings.ec,
+        noiseSuppression:state.settings.ns,
+        autoGainControl:state.settings.agc,
+        deviceId: state.settings.micDevice||undefined
+      }
     });
-    ctx.localAudioTrack = track;
-    await ctx.room.localParticipant.publishTrack(track, { source: Track.Source.Microphone });
-  }catch(e){ console.error(e); alert("Не удалось включить микрофон: "+(e?.message||e)); }
+    const pub = micPub();
+    ctx.localAudioTrack = pub?.track || ctx.localAudioTrack;
+  }catch(e){ alert("Не удалось включить микрофон: "+(e?.message||e)); }
 }
 
 export async function toggleMic(){
@@ -84,31 +64,14 @@ export async function toggleMic(){
   try{
     const lp  = ctx.room.localParticipant;
     const targetOn = !isMicActuallyOn();
-    if (typeof lp?.setMicrophoneEnabled === "function"){
-      await lp.setMicrophoneEnabled(targetOn, {
-        audioCaptureDefaults:{
-          echoCancellation:state.settings.ec,
-          noiseSuppression:state.settings.ns,
-          autoGainControl:state.settings.agc,
-          deviceId: state.settings.micDevice||undefined
-        }
-      });
-    } else {
-      let pub = micPub();
-      if (!pub){
-        if (targetOn){ await ensureMicOn(); pub = micPub(); }
-      } else {
-        if (targetOn){
-          if (typeof pub.unmute === "function")      await pub.unmute();
-          else if (typeof pub.setMuted === "function") await pub.setMuted(false);
-          else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
-        } else {
-          if (typeof pub.mute === "function")         await pub.mute();
-          else if (typeof pub.setMuted === "function") await pub.setMuted(true);
-          else if (pub.track?.setEnabled)              pub.track.setEnabled(false);
-        }
+    await lp.setMicrophoneEnabled(targetOn, {
+      audioCaptureDefaults:{
+        echoCancellation:state.settings.ec,
+        noiseSuppression:state.settings.ns,
+        autoGainControl:state.settings.agc,
+        deviceId: state.settings.micDevice||undefined
       }
-    }
+    });
   }catch(e){
     alert("Ошибка микрофона: "+(e?.message||e));
   }finally{
@@ -178,22 +141,13 @@ export async function ensureCameraOn(force=false){
   camBusy = true;
   const lp = ctx.room?.localParticipant;
   const devId = state.settings.camDevice || await pickCameraDevice(state.settings.camFacing||"user");
-
-  // Fallback: manual track creation with minimal constraints
-  const constraints = devId ? { deviceId:{ exact: devId } } : {};
-  const old = ctx.localVideoTrack || camPub()?.track || null;
   try{
-    const newTrack = await createLocalVideoTrack(constraints);
+    await lp.setCameraEnabled(true, {
+      videoCaptureDefaults: { deviceId: devId || undefined }
+    });
     const pub = camPub();
-    if (pub){
-      await pub.replaceTrack(newTrack);
-      await (pub.setMuted?.(false) || pub.unmute?.());
-    } else {
-      await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
-    }
-    try { old?.stop?.(); } catch {}
-    ctx.localVideoTrack = newTrack;
-    attachVideoToTile(newTrack, ctx.room.localParticipant.identity, true);
+    ctx.localVideoTrack = pub?.track || ctx.localVideoTrack;
+    if (pub?.track) attachVideoToTile(pub.track, ctx.room.localParticipant.identity, true);
     window.requestAnimationFrame(applyCamTransformsToLive);
     setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
     const arTick = ()=>{
@@ -267,23 +221,16 @@ export async function toggleCam(){
   try{
     const lp = ctx.room.localParticipant;
     const targetOn = !isCamActuallyOn();
-    let pub = camPub();
-    if (!pub){
-      if (targetOn){
-        try{ await ensureCameraOn(true); }catch{}
-        pub = camPub();
-      }
+    if (targetOn){
+      const devId = state.settings.camDevice || await pickCameraDevice(state.settings.camFacing||"user");
+      await lp.setCameraEnabled(true, { videoCaptureDefaults: { deviceId: devId || undefined } });
+      // подстрахуемся: иногда публикация остаётся muted после enable
+      try{ const pub = camPub(); await (pub?.setMuted?.(false) || pub?.unmute?.()); pub?.track?.setEnabled?.(true); }catch{}
     } else {
-      if (targetOn){
-        if (typeof pub.unmute === "function")      await pub.unmute();
-        else if (typeof pub.setMuted === "function") await pub.setMuted(false);
-        else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
-      } else {
-        if (typeof pub.mute === "function")         await pub.mute();
-        else if (typeof pub.setMuted === "function") await pub.setMuted(true);
-        else if (pub.track?.setEnabled)              pub.track.setEnabled(false);
-        showAvatarInTile(lp.identity);
-      }
+      await lp.setCameraEnabled(false);
+      // iOS Chrome совместимость: явно замьютить и отключить track
+      try{ const pub = camPub(); await (pub?.setMuted?.(true) || pub?.mute?.()); pub?.track?.setEnabled?.(false); }catch{}
+      showAvatarInTile(lp.identity);
     }
     applyLayout();
   }catch(e){
@@ -308,81 +255,45 @@ export async function toggleFacing(){
   const nextFacing = prevFacing === "user" ? "environment" : "user";
 
   try{
-    // 1) мягкий путь — restartTrack, если есть
-    if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
-      // freeze AR while switching
-      try{
-        const v0 = getLocalTileVideo();
-        const tile0 = v0?.closest('.tile');
-        if (v0 && tile0){
-          const ar0 = (v0.videoWidth>0 && v0.videoHeight>0) ? (v0.videoWidth/v0.videoHeight) : (tile0.classList.contains('portrait')? (9/16):(16/9));
-          tile0.dataset.freezeAr = String(ar0);
-        }
-      }catch{}
-      const prefs = captureCurrentVideoPrefs();
-      const base = { facingMode: nextFacing };
-      // как в тесте — минимум констрейнтов при рестарте
-      await ctx.localVideoTrack.restartTrack({ facingMode: nextFacing });
-      // гарантируем, что паблиш не остался в mute
-      try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
-      state.settings.camFacing = nextFacing;
-      // дёрнем стабилизацию AR/раскладки как при замене трека
-      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-      window.requestAnimationFrame(()=>{
-        const v = getLocalTileVideo();
-        if (v){
-          const tile = v.closest(".tile");
-          if (tile) tile.classList.toggle("portrait", v.videoHeight>v.videoWidth);
-          applyCamTransformsToLive();
-          const unfreeze = ()=>{ try{ delete tile.dataset.freezeAr; }catch{} };
-          setTimeout(unfreeze, 300);
-          setTimeout(unfreeze, 800);
-          setTimeout(unfreeze, 1600);
-        }
-      });
+    // Только мягкий путь — restartTrack, без фолбэков
+    if (!(ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function")){
+      throw new Error("restartTrack недоступен для текущего локального видео-трека");
     }
-    // 2) (отключено) applyConstraints на исходном треке часто сбивает формат до 4:3 — пропускаем
-    // 3) Фолбэк — новый трек
-    else {
-      state.settings.camFacing = nextFacing;
-      state.settings.camDevice = ""; // дать браузеру выбрать
-
-      const picked = await pickCameraDevice(nextFacing);
-      // Минимальные констрейнты, как в тесте: только deviceId или facingMode
-      const constraints = picked ? { deviceId: { exact: picked } }
-                                 : { facingMode: { ideal: nextFacing } };
-      const newTrack = await createLocalVideoTrack(constraints);
-      const meId = ctx.room.localParticipant.identity;
-      const pub = camPub();
-
-      attachVideoToTile(newTrack, meId, true);
-
-      if (pub) {
-        await pub.replaceTrack(newTrack);
-        try { ctx.localVideoTrack?.stop(); } catch {}
-        try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{}
-      } else {
-        await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
+    // freeze AR while switching
+    try{
+      const v0 = getLocalTileVideo();
+      const tile0 = v0?.closest('.tile');
+      if (v0 && tile0){
+        const ar0 = (v0.videoWidth>0 && v0.videoHeight>0) ? (v0.videoWidth/v0.videoHeight) : (tile0.classList.contains('portrait')? (9/16):(16/9));
+        tile0.dataset.freezeAr = String(ar0);
       }
-
-      ctx.localVideoTrack = newTrack;
-      applyCamTransformsToLive();
-      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-      // форс-обновление AR локального видео после смены facing
-      const arTick2 = ()=>{
-        const v = getLocalTileVideo();
-        if (!v) return;
-        const tile = v.closest('.tile');
-        if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
-      };
-      const ticks2 = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
-      ticks2.forEach(ms=> setTimeout(arTick2, ms));
-    }
-
+    }catch{}
+    // передаём предпочтительные размеры/AR, чтобы избежать отката в 4:3
+    const prefs = captureCurrentVideoPrefs();
+    const restartOpts = { facingMode: nextFacing };
+    if (prefs?.width)       restartOpts.width       = { ideal: prefs.width };
+    if (prefs?.height)      restartOpts.height      = { ideal: prefs.height };
+    if (prefs?.aspectRatio) restartOpts.aspectRatio = { ideal: prefs.aspectRatio };
+    await ctx.localVideoTrack.restartTrack(restartOpts);
+    try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
+    state.settings.camFacing = nextFacing;
+    // дёрнем стабилизацию AR/раскладки как при замене трека
+    setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+    window.requestAnimationFrame(()=>{
+      const v = getLocalTileVideo();
+      if (v){
+        const tile = v.closest(".tile");
+        if (tile) tile.classList.toggle("portrait", v.videoHeight>v.videoWidth);
+        applyCamTransformsToLive();
+        const unfreeze = ()=>{ try{ delete tile.dataset.freezeAr; }catch{} };
+        setTimeout(unfreeze, 300);
+        setTimeout(unfreeze, 800);
+        setTimeout(unfreeze, 1600);
+      }
+    });
     applyLayout();
   }catch(e){
     state.settings.camFacing = prevFacing;
-    console.error("[camera] switch failed:", e);
     alert("Не удалось переключить камеру: " + (e?.message||e));
   }finally{
     camBusy = false;
