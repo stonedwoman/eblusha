@@ -128,7 +128,6 @@ export async function connectLiveKit(token){
   ctx.room.on(RoomEvent.LocalTrackPublished,   (pub,p)=>{
     if(pub?.source===Track.Source.Camera && p?.isLocal && pub.track){
       ctx.localVideoTrack = pub.track;
-      // повторно прикрепляем, чтобы обновить sid/AR после restartTrack
       attachVideoToTile(pub.track, p.identity, true);
       markHasVideo(p.identity, true);
       applyLayout();
