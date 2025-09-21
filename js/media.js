@@ -138,6 +138,13 @@ async function countVideoInputs(){
   }catch{ return 0; }
 }
 
+function isMobileUA(){
+  try{
+    const ua = navigator.userAgent||navigator.vendor||'';
+    return /Android|iPhone|iPad|iPod|Mobile|Silk/i.test(ua);
+  }catch{ return false; }
+}
+
 function captureCurrentVideoPrefs(){
   try{
     const pub = camPub();
@@ -228,6 +235,8 @@ async function trySwitchFacingOnSameTrack(newFacing){
   const lkTrack = pub?.track || ctx.localVideoTrack;
   const mst = lkTrack?.mediaStreamTrack;
   if (!mst || typeof mst.applyConstraints !== "function") return false;
+  // На мобильных применяем фолбэк с новым треком — applyConstraints/restart часто ломают публикацию
+  if (isMobileUA()) return false;
 
   try{
     const caps = mst.getCapabilities?.() || {};
@@ -331,7 +340,7 @@ export async function toggleFacing(){
 
   try{
     // 1) мягкий путь — restartTrack, если есть
-    if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
+    if (!isMobileUA() && ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
       // freeze AR while switching
       try{
         const v0 = getLocalTileVideo();
@@ -348,6 +357,8 @@ export async function toggleFacing(){
         ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
         ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
       });
+      // гарантируем, что паблиш не остался в mute
+      try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
       state.settings.camFacing = nextFacing;
       window.requestAnimationFrame(()=>{
         const v = getLocalTileVideo();
@@ -372,7 +383,8 @@ export async function toggleFacing(){
       state.settings.camDevice = ""; // дать браузеру выбрать
 
       const picked = await pickCameraDevice(nextFacing);
-      const prefs = captureCurrentVideoPrefs();
+      // На мобильных не задаём размеры/AR, чтобы избежать «мертвых» треков; на десктопе можно оставить ideal
+      const prefs = isMobileUA() ? { } : captureCurrentVideoPrefs();
       const constraints = picked ? { deviceId: { exact: picked },
                                      ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
                                      ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
@@ -392,6 +404,7 @@ export async function toggleFacing(){
       if (pub) {
         await pub.replaceTrack(newTrack);
         try { ctx.localVideoTrack?.stop(); } catch {}
+        try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{}
       } else {
         await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
       }
