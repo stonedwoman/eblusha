@@ -144,11 +144,11 @@ function captureCurrentVideoPrefs(){
     const lkTrack = pub?.track || ctx.localVideoTrack;
     const mst = lkTrack?.mediaStreamTrack;
     const s = mst?.getSettings?.() || {};
-    const v = getLocalTileVideo();
-    const w = (s.width|0) || (v?.videoWidth|0) || 0;
-    const h = (s.height|0) || (v?.videoHeight|0) || 0;
-    const ar = (w>0 && h>0) ? (w/h) : (v && v.videoWidth>0 && v.videoHeight>0 ? (v.videoWidth/v.videoHeight) : undefined);
-    return { width: w||undefined, height: h||undefined, aspectRatio: ar||undefined };
+    const v0 = getLocalTileVideo();
+    const w0 = (s.width|0) || (v0?.videoWidth|0) || 0;
+    const h0 = (s.height|0) || (v0?.videoHeight|0) || 0;
+    const ar0 = (w0>0 && h0>0) ? (w0/h0) : (v0 && v0.videoWidth>0 && v0.videoHeight>0 ? (v0.videoWidth/v0.videoHeight) : undefined);
+    return { width: w0||undefined, height: h0||undefined, aspectRatio: ar0||undefined };
   }catch{ return { width: undefined, height: undefined, aspectRatio: undefined }; }
 }
 
@@ -234,48 +234,35 @@ async function trySwitchFacingOnSameTrack(newFacing){
     if (caps.facingMode && Array.isArray(caps.facingMode) && !caps.facingMode.includes(newFacing)){
       return false;
     }
-
-    // Preserve current prefs (width/height/aspectRatio) to avoid 4:3 fallback
-    let w, h, ar;
-    try{
-      const s = mst.getSettings?.() || {};
-      w = s.width|0; h = s.height|0; ar = (w>0 && h>0) ? (w/h) : undefined;
-      if (!ar){
-        const v = getLocalTileVideo();
-        const vw = v?.videoWidth|0, vh = v?.videoHeight|0;
-        if (vw>0 && vh>0){ w = w||vw; h = h||vh; ar = vw/vh; }
-      }
-    }catch{}
-
-    // Try exact first, then ideal, then only facingMode
+    // Сохраняем текущие предпочтения AR/размера и пробуем exact → ideal
+    const s = mst.getSettings?.() || {};
+    const vEl = getLocalTileVideo();
+    const wPref = (s.width|0) || (vEl?.videoWidth|0) || undefined;
+    const hPref = (s.height|0) || (vEl?.videoHeight|0) || undefined;
+    const arPref = (wPref && hPref) ? (wPref/hPref) : ((vEl?.videoWidth>0 && vEl?.videoHeight>0) ? (vEl.videoWidth/vEl.videoHeight) : undefined);
     try {
       await mst.applyConstraints({
         facingMode: { exact: newFacing },
-        ...(w ? { width: { exact: w } } : {}),
-        ...(h ? { height: { exact: h } } : {}),
-        ...(ar? { aspectRatio: { exact: ar } } : {})
+        ...(wPref ? { width:  { exact: wPref } } : {}),
+        ...(hPref ? { height: { exact: hPref } } : {}),
+        ...(arPref? { aspectRatio: { exact: arPref } } : {})
       });
-    } catch {
-      try {
-        await mst.applyConstraints({
-          facingMode: { ideal: newFacing },
-          ...(w ? { width: { ideal: w } } : {}),
-          ...(h ? { height: { ideal: h } } : {}),
-          ...(ar? { aspectRatio: { ideal: ar } } : {})
-        });
-      } catch {
-        try { await mst.applyConstraints({ facingMode: { exact: newFacing } }); }
-        catch { await mst.applyConstraints({ facingMode: newFacing }); }
-      }
+    }
+    catch {
+      await mst.applyConstraints({
+        facingMode: newFacing,
+        ...(wPref ? { width:  { ideal: wPref } } : {}),
+        ...(hPref ? { height: { ideal: hPref } } : {}),
+        ...(arPref? { aspectRatio: { ideal: arPref } } : {})
+      });
     }
 
-    const v = getLocalTileVideo();
-    if (v){
-      const tile = v.closest(".tile");
+    const v2 = getLocalTileVideo();
+    if (v2){
+      const tile = v2.closest(".tile");
       setTimeout(()=> {
-        // поправим класс портрет/альбом
-        const W = v.videoWidth, H = v.videoHeight;
-        tile?.classList.toggle("portrait", H>W);
+        const wv = v2.videoWidth, hv = v2.videoHeight;
+        tile?.classList.toggle("portrait", hv>wv);
         applyCamTransformsToLive();
       }, 0);
     }
@@ -343,34 +330,24 @@ export async function toggleFacing(){
   const nextFacing = prevFacing === "user" ? "environment" : "user";
 
   try{
-    // freeze AR while switching
-    try{
-      const v0 = getLocalTileVideo();
-      const tile0 = v0?.closest('.tile');
-      if (v0 && tile0){
-        const ar0 = (v0.videoWidth>0 && v0.videoHeight>0) ? (v0.videoWidth/v0.videoHeight) : (tile0.classList.contains('portrait')? (9/16):(16/9));
-        tile0.dataset.freezeAr = String(ar0);
-      }
-    }catch{}
-
-    // 1) Мягкий путь — restartTrack c сохранением размеров/AR
+    // 1) мягкий путь — restartTrack, если есть
     if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
-      const prefs = captureCurrentVideoPrefs();
+      // freeze AR while switching
       try{
-        await ctx.localVideoTrack.restartTrack({
-          facingMode: nextFacing,
-          ...(prefs.width  ? { width:  { exact: prefs.width  } } : {}),
-          ...(prefs.height ? { height: { exact: prefs.height } } : {}),
-          ...(prefs.aspectRatio ? { aspectRatio: { exact: prefs.aspectRatio } } : {})
-        });
-      }catch{
-        await ctx.localVideoTrack.restartTrack({
-          facingMode: nextFacing,
-          ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-          ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-          ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-        });
-      }
+        const v0 = getLocalTileVideo();
+        const tile0 = v0?.closest('.tile');
+        if (v0 && tile0){
+          const ar0 = (v0.videoWidth>0 && v0.videoHeight>0) ? (v0.videoWidth/v0.videoHeight) : (tile0.classList.contains('portrait')? (9/16):(16/9));
+          tile0.dataset.freezeAr = String(ar0);
+        }
+      }catch{}
+      const prefs = captureCurrentVideoPrefs();
+      await ctx.localVideoTrack.restartTrack({
+        facingMode: nextFacing,
+        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
+        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
+        ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
+      });
       state.settings.camFacing = nextFacing;
       window.requestAnimationFrame(()=>{
         const v = getLocalTileVideo();
@@ -385,29 +362,27 @@ export async function toggleFacing(){
         }
       });
     }
-    // 2) applyConstraints на текущем MST (улучшенный вариант внутри trySwitchFacingOnSameTrack)
+    // 2) applyConstraints
     else if (await trySwitchFacingOnSameTrack(nextFacing)){
       // ok
     }
-    // 3) Фолбэк — новый трек с deviceId и ideal-констрейнтами размеров/AR
+    // 3) Фолбэк — новый трек
     else {
       state.settings.camFacing = nextFacing;
       state.settings.camDevice = ""; // дать браузеру выбрать
 
       const picked = await pickCameraDevice(nextFacing);
       const prefs = captureCurrentVideoPrefs();
-      const constraints = picked ? {
-        deviceId: { exact: picked },
-        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-        ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-      } : {
-        facingMode: { ideal: nextFacing },
-        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-        ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
-      };
-
+      const constraints = picked ? { deviceId: { exact: picked },
+                                     ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
+                                     ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
+                                     ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
+                                   }
+                                 : { facingMode: { ideal: nextFacing },
+                                     ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
+                                     ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
+                                     ...(prefs.aspectRatio ? { aspectRatio: { ideal: prefs.aspectRatio } } : {})
+                                   };
       const newTrack = await createLocalVideoTrack(constraints);
       const meId = ctx.room.localParticipant.identity;
       const pub = camPub();
@@ -424,12 +399,12 @@ export async function toggleFacing(){
       ctx.localVideoTrack = newTrack;
       applyCamTransformsToLive();
       setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+      // форс-обновление AR локального видео после смены facing
       const arTick2 = ()=>{
         const v = getLocalTileVideo();
         if (!v) return;
         const tile = v.closest('.tile');
         if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
-        try{ delete tile.dataset.freezeAr; }catch{}
       };
       const ticks2 = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
       ticks2.forEach(ms=> setTimeout(arTick2, ms));

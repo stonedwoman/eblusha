@@ -32,8 +32,12 @@ export async function joinRoom(){
     state.me.room=(byId('room').value||'').trim()||'room-1';
     byId('joinBtn').disabled=true;
 
-    const r=await fetch(`${TOKEN_ENDPOINT}?room=${encodeURIComponent(state.me.room)}&user=${encodeURIComponent(state.me.name)}`);
-    const { token } = await r.json();
+    const url = `${TOKEN_ENDPOINT}?room=${encodeURIComponent(state.me.room)}&user=${encodeURIComponent(state.me.name)}`;
+    const r=await fetch(url, { mode:'cors' });
+    const raw = await r.text();
+    if (!r.ok){ throw new Error('token http '+r.status+' '+raw.slice(0,180)); }
+    let token = raw.trim();
+    try{ if (/^\s*\{/.test(raw)){ const j=JSON.parse(raw); token = j.token||j.accessToken||j.jwt||token; } }catch{}
     await connectLiveKit(token);
 
     hide('screen-auth'); show('screen-app');
