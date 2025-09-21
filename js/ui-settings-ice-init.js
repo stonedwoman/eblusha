@@ -126,8 +126,8 @@ export async function applySettingsFromModal(closeAfter){
     if (cp && isCamActuallyOn()){
       const devId = state.settings.camDevice || null;
       const constraints = devId
-        ? { frameRate:24, deviceId:{ exact: devId } }
-        : { frameRate:24, facingMode: { exact: state.settings.camFacing||"user" } };
+        ? { deviceId:{ exact: devId } }
+        : { facingMode: { ideal: state.settings.camFacing||"user" } };
       const oldV = ctx.localVideoTrack || cp.track;
       const newCam = await createLocalVideoTrack(constraints);
       await cp.replaceTrack(newCam);
@@ -155,7 +155,7 @@ export async function startCamPreview(){
       return;
     }
     const opts={}; if(state.settings.camDevice) opts.deviceId={ exact: state.settings.camDevice };
-    previewTrack=await createLocalVideoTrack({ frameRate:24, ...opts });
+    previewTrack=await createLocalVideoTrack(opts);
     const v=previewTrack.attach();
     const wrap=byId("camPreview");
     wrap.querySelector("video")?.remove();
