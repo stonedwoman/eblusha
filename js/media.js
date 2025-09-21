@@ -172,9 +172,9 @@ export async function pickCameraDevice(facing){
   }catch{ return null; }
 }
 
-export async function ensureCameraOn(){
+export async function ensureCameraOn(force=false){
   if (!ctx.room) return;
-  if (camBusy) return; // защита от повторного входа/зацикливания
+  if (camBusy && !force) return; // защита от повторного входа/зацикливания
   camBusy = true;
   const lp = ctx.room?.localParticipant;
   const devId = state.settings.camDevice || await pickCameraDevice(state.settings.camFacing||"user");
@@ -182,28 +182,33 @@ export async function ensureCameraOn(){
   // Fallback: manual track creation with minimal constraints
   const constraints = devId ? { deviceId:{ exact: devId } } : {};
   const old = ctx.localVideoTrack || camPub()?.track || null;
-  const newTrack = await createLocalVideoTrack(constraints);
-  const pub = camPub();
-  if (pub){
-    await pub.replaceTrack(newTrack);
-    await (pub.setMuted?.(false) || pub.unmute?.());
-  } else {
-    await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
+  try{
+    const newTrack = await createLocalVideoTrack(constraints);
+    const pub = camPub();
+    if (pub){
+      await pub.replaceTrack(newTrack);
+      await (pub.setMuted?.(false) || pub.unmute?.());
+    } else {
+      await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
+    }
+    try { old?.stop?.(); } catch {}
+    ctx.localVideoTrack = newTrack;
+    attachVideoToTile(newTrack, ctx.room.localParticipant.identity, true);
+    window.requestAnimationFrame(applyCamTransformsToLive);
+    setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+    const arTick = ()=>{
+      const v = getLocalTileVideo();
+      if (!v) return;
+      const tile = v.closest('.tile');
+      if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
+    };
+    const ticks = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
+    ticks.forEach(ms=> setTimeout(arTick, ms));
+  }catch(e){
+    alert("Не удалось включить камеру: "+(e?.message||e));
+  } finally {
+    camBusy = false;
   }
-  try { old?.stop?.(); } catch {}
-  ctx.localVideoTrack = newTrack;
-  attachVideoToTile(newTrack, ctx.room.localParticipant.identity, true);
-  window.requestAnimationFrame(applyCamTransformsToLive);
-  setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-  const arTick = ()=>{
-    const v = getLocalTileVideo();
-    if (!v) return;
-    const tile = v.closest('.tile');
-    if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
-  };
-  const ticks = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
-  ticks.forEach(ms=> setTimeout(arTick, ms));
-  camBusy = false;
 }
 
 async function trySwitchFacingOnSameTrack(newFacing){
@@ -265,7 +270,7 @@ export async function toggleCam(){
     let pub = camPub();
     if (!pub){
       if (targetOn){
-        try{ await ensureCameraOn(); }catch{}
+        try{ await ensureCameraOn(true); }catch{}
         pub = camPub();
       }
     } else {
