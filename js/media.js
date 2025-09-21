@@ -226,6 +226,7 @@ export async function toggleCam(){
       await lp.setCameraEnabled(true, { videoCaptureDefaults: { deviceId: devId || undefined } });
       // подстрахуемся: иногда публикация остаётся muted после enable
       try{ const pub = camPub(); await (pub?.setMuted?.(false) || pub?.unmute?.()); pub?.track?.setEnabled?.(true); }catch{}
+      try{ const pub = camPub(); if (pub?.track) attachVideoToTile(pub.track, lp.identity, true); }catch{}
     } else {
       await lp.setCameraEnabled(false);
       // iOS Chrome совместимость: явно замьютить и отключить track
@@ -270,11 +271,26 @@ export async function toggleFacing(){
     }catch{}
     // передаём предпочтительные размеры/AR, чтобы избежать отката в 4:3
     const prefs = captureCurrentVideoPrefs();
-    const restartOpts = { facingMode: nextFacing };
-    if (prefs?.width)       restartOpts.width       = { ideal: prefs.width };
-    if (prefs?.height)      restartOpts.height      = { ideal: prefs.height };
-    if (prefs?.aspectRatio) restartOpts.aspectRatio = { ideal: prefs.aspectRatio };
-    await ctx.localVideoTrack.restartTrack(restartOpts);
+    const picked = await pickCameraDevice(nextFacing);
+    const buildOpts = (mode)=>{
+      const o = { facingMode: mode };
+      if (picked) o.deviceId = { exact: picked };
+      if (prefs?.width)       o.width       = { exact: prefs.width };
+      if (prefs?.height)      o.height      = { exact: prefs.height };
+      if (prefs?.aspectRatio) o.aspectRatio = { exact: prefs.aspectRatio };
+      return o;
+    };
+    // Пытаемся строго сохранить параметры; если не получится — ослабим до ideal
+    try{
+      await ctx.localVideoTrack.restartTrack(buildOpts(nextFacing));
+    }catch{
+      const o = { facingMode: nextFacing };
+      if (picked) o.deviceId = { exact: picked };
+      if (prefs?.width)       o.width       = { ideal: prefs.width };
+      if (prefs?.height)      o.height      = { ideal: prefs.height };
+      if (prefs?.aspectRatio) o.aspectRatio = { ideal: prefs.aspectRatio };
+      await ctx.localVideoTrack.restartTrack(o);
+    }
     try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
     state.settings.camFacing = nextFacing;
     // дёрнем стабилизацию AR/раскладки как при замене трека
