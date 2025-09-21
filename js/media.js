@@ -381,7 +381,7 @@ export async function toggleFacing(){
       });
     }
     // 2) applyConstraints
-    else if (await trySwitchFacingOnSameTrack(nextFacing)){
+    else if (!isMobileUA() && await trySwitchFacingOnSameTrack(nextFacing)){
       // ok
     }
     // 3) Фолбэк — новый трек
