@@ -38,20 +38,22 @@ html, body{
 /* Корневой контейнер плиток — обычный блок (раньше была «лента») */
 .tiles{
   display:block !important;           /* не grid и не flex — не мешаем абсолютам детей */
+  height:100%;
+  min-height:0;
 }
 
 /* Рабочая область плиток. Её позиционирует мозаика (JS). */
 .tiles-main{
-  position:relative;                   /* база для absolute-детей */
+  position:relative;
   min-height:0;
-  overflow:hidden;                     /* горизонталь нам не нужна в мозаике */
+  overflow:hidden;
   -webkit-overflow-scrolling:auto;
   overscroll-behavior:contain;
   touch-action:auto;
-  /* ВАЖНО: никаких display:grid/flex — иначе могут быть побочки.
-     Если где-то остался старый стиль, перекрываем: */
-  display:block;
-  gap:0;                               /* gap grid-а не нужен абсолютам */
+  display:grid;
+  gap: var(--tile-gap);
+  height:100%;
+  width:100%;
 }
 
 /* Фолбэк для тайла до прихода JS (чтобы не было белого экрана).

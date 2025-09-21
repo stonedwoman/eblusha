@@ -290,10 +290,7 @@ export function setTileAspectFromVideo(tile, videoEl){
   const m = tilesMain(); if (m && tile.parentElement !== m) m.appendChild(tile);
 
   // Всегда форсируем перераскладку (и на десктопе в мозаике тоже)
-  try{
-    layoutUniformGrid();
-    setTimeout(layoutUniformGrid, 60);
-  }catch{}
+  try{ applyLayout(); setTimeout(applyLayout, 60); }catch{}
   if (tile.classList.contains('spotlight')) safeFitSpotlightSize();
 }
 
@@ -385,7 +382,7 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
     // как только получили валидные размеры — показываем видео и форсим релейаут
     if ((v.videoWidth|0) > 0 && (v.videoHeight|0) > 0){
       v.style.visibility = '';
-      try { layoutUniformGrid(); setTimeout(layoutUniformGrid, 30); } catch {}
+      try { applyLayout(); setTimeout(applyLayout, 30); } catch {}
     }
   };
   v.addEventListener('loadedmetadata', tryApply);
@@ -402,14 +399,7 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
   setTimeout(()=>{ try { recomputeHasVideo(identity.replace('#screen','')); } catch {} }, 30);
   // Дёргаем общий слой раскладки, чтобы профили (desktop/mobile) точно переосмыслили режим
   try { applyLayout(); } catch {}
-  if (isMobileGrid() || isMobileView()){
-    layoutUniformGrid();
-    setTimeout(()=> layoutUniformGrid(), 60);
-    setTimeout(()=> layoutUniformGrid(), 160);
-    setTimeout(()=> layoutUniformGrid(), 320);
-  } else {
-  requestLayout();
-  }
+  try{ applyLayout(); setTimeout(applyLayout, 60); setTimeout(applyLayout, 160); setTimeout(applyLayout, 320); }catch{}
 }
 
 export function ensureTile(identity, name, isLocal){
@@ -448,12 +438,7 @@ export function showAvatarInTile(identity){
   try { t.style.background = hashColor(t.dataset.name||''); } catch {}
   if (t.classList.contains('spotlight')) fitSpotlightSize();
   try { applyLayout(); } catch {}
-  if (isMobileGrid()){
-    layoutUniformGrid();
-    setTimeout(()=>{ if (isMobileGrid()) layoutUniformGrid(); }, 50);
-  } else {
-  requestLayout();
-  }
+  try{ applyLayout(); setTimeout(()=>{ try{ applyLayout(); }catch{} }, 50); }catch{}
 }
 
 export function attachAudioTrack(track, baseId){
@@ -541,10 +526,11 @@ function getFieldSize(){
 let layoutRAF = 0;
 function requestLayout(){
   if (layoutRAF) return;
-  layoutRAF = requestAnimationFrame(()=>{ layoutRAF = 0; layoutUniformGrid(); });
+  layoutRAF = requestAnimationFrame(()=>{ layoutRAF = 0; try{ applyLayout(); }catch{} });
 }
 
 function layoutUniformGrid(){
+  try{ applyLayout(); return; }catch{}
   const m = tilesMain();
   if (!m) return;
 
@@ -939,7 +925,7 @@ function attachVideoARWatcher(video){
     const tile = video.closest?.('.tile');
     if (!tile) return;
     setTileAspectFromVideo(tile, video);
-    if (isMobileGrid() || isMobileView()) layoutUniformGrid(); else safeFitSpotlightSize();
+    if (isMobileGrid() || isMobileView()) { try{ applyLayout(); }catch{} } else { safeFitSpotlightSize(); }
   };
   video.addEventListener('loadedmetadata', handler);
   video.addEventListener('loadeddata', handler);
@@ -978,11 +964,7 @@ document.addEventListener('DOMContentLoaded', installVideoARWatchers);
 
 // реагируем на событие из media.js после замены локального трека
 window.addEventListener('app:local-video-replaced', ()=>{
-  try{
-    layoutUniformGrid();
-    setTimeout(layoutUniformGrid, 60);
-    setTimeout(layoutUniformGrid, 160);
-  }catch{}
+  try{ applyLayout(); setTimeout(applyLayout, 60); setTimeout(applyLayout, 160); }catch{}
 });
 
 // Длительная стабилизация AR после переключения камеры (iOS может менять размеры дольше 300мс)
@@ -994,7 +976,7 @@ function stabilizeAfterLocalVideoChange(totalMs = 2600, stepMs = 200){
         const tile = v.closest('.tile');
         if (tile) setTileAspectFromVideo(tile, v);
       });
-      layoutUniformGrid();
+      try{ applyLayout(); }catch{}
     }catch{}
     elapsed += stepMs;
     if (elapsed < totalMs) setTimeout(tick, stepMs);
@@ -1005,12 +987,12 @@ window.addEventListener('app:local-video-replaced', ()=> stabilizeAfterLocalVide
 
 /* Экспорт — на случай ручного пересчёта извне */
 export function relayoutTilesIfMobile(){
-  if (isMobileGrid()) layoutUniformGrid(); else clearGrid();
+  if (isMobileGrid()) { try{ applyLayout(); }catch{} } else { clearGrid(); }
 }
 
 // Принудительный пересчёт мозаики (используется десктоп-профилем)
 export function relayoutTilesForce(){
-  layoutUniformGrid();
+  try{ applyLayout(); }catch{}
 }
 
 /* ===== Дедупликация тайлов по data-pid (предпочитаем тайл с видео) ===== */

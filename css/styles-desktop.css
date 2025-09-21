@@ -67,7 +67,7 @@ body.no-scroll{overflow:hidden}
 .tiles.spotlight{display:grid; grid-template-columns:minmax(0,1fr) var(--rail-w); gap:var(--tile-gap)}
 .tiles.spotlight.single{grid-template-columns:1fr;align-content: center;}
 
-.tiles-main{position:relative;min-height:0;height:100%;display:grid;grid-template-columns:repeat(1,1fr);gap:var(--tile-gap);align-content:center;place-items:center;overflow:hidden;}
+.tiles-main{position:relative;min-height:0;height:100%;display:grid;grid-template-columns:repeat(1,1fr);gap:var(--tile-gap);align-content:start;place-items:stretch;overflow:hidden;}
 .tiles.spotlight .tiles-main{grid-column:1}
 .tiles-rail{display:none}
 .tiles.spotlight .tiles-rail{display:flex; grid-column:2; flex-direction:column; gap:var(--tile-gap); min-width:0; max-width:var(--rail-w); min-height:0; overflow:auto}
