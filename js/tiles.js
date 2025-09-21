@@ -211,6 +211,8 @@ export function createTileEl(identity, name, isLocal){
 document.addEventListener('click', (e)=>{
   try{
     if (!isMobileView()) return;
+    // Не перехватываем клики по кнопке фуллскрина — даём ей всплыть
+    if (e.target && e.target.closest && e.target.closest('.fs-btn')) return;
     const t = e.target && (e.target.closest ? e.target.closest('.tile') : null);
     if (t){
       // если это мини-тайл или тайл без видео — открываем настройки
