@@ -267,12 +267,10 @@ export async function toggleFacing(){
       const meId = ctx.room.localParticipant.identity;
       const pub = camPub();
       if (pub){
-        await pub.replaceTrack(newTrack);
-        try{ ctx.localVideoTrack?.stop?.(); }catch{}
-        try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{}
-      } else {
-        await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
+        try { await ctx.room.localParticipant.unpublishTrack(pub.track || ctx.localVideoTrack); } catch {}
+        try { ctx.localVideoTrack?.stop?.(); } catch {}
       }
+      await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
       ctx.localVideoTrack = newTrack;
       attachVideoToTile(newTrack, meId, true);
       applyCamTransformsToLive();
