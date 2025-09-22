@@ -87,11 +87,6 @@ const ovMedia = byId('ovMedia');
 const ovClose = byId('ovClose');
 const ovName  = byId('ovName');
 let ovReturnTile = null;
-const ovCtrls = byId('ovCtrls');
-const ovZoomIn = byId('ovZoomIn');
-const ovZoomOut = byId('ovZoomOut');
-const ovZoomReset = byId('ovZoomReset');
-const ovMirror = byId('ovMirror');
 /* ==== Mini-settings (mobile) ==== */
 let miniDlg = null;
 function ensureMiniDlg(){
@@ -146,29 +141,7 @@ export async function openTileOverlay(tile){
   ovReturnTile = tile;
   ovName.textContent = tile.dataset.name || 'Видео';
   ov.classList.add('open'); ov.setAttribute('aria-hidden','false');
-  // Always use a cloned video bound to the same stream, so tile and overlay can update independently
-  ovMedia.innerHTML = '';
-  try{
-    const clone = document.createElement('video');
-    clone.autoplay = true; clone.playsInline = true; clone.muted = v.muted;
-    try{ clone.setAttribute('autoplay',''); clone.setAttribute('playsinline',''); if (clone.muted) clone.setAttribute('muted',''); }catch{}
-    const ms = v.srcObject instanceof MediaStream ? v.srcObject : null;
-    if (ms){ clone.srcObject = ms; clone.play?.(); }
-    else if (v.captureStream){
-      try{ const s = v.captureStream(); clone.srcObject = s; clone.play?.(); }catch{}
-    }
-    ovMedia.appendChild(clone);
-  }catch{ ovMedia.appendChild(v); }
-  // If this is our own tile, enable pinch-to-zoom controls for processed camera
-  try{
-    const isMe = tile.dataset.pid === ctx.room?.localParticipant?.identity;
-    if (isMe){
-      enableOverlayPinchZoom(ovMedia);
-      if (ovCtrls){ ovCtrls.style.display='flex'; } // show controls bar
-    } else {
-      if (ovCtrls){ ovCtrls.style.display='none'; }
-    }
-  }catch{}
+  ovMedia.innerHTML = ''; ovMedia.appendChild(v);
   try{ if(ov.requestFullscreen) await ov.requestFullscreen({ navigationUI:'hide' }); }catch{}
   try{ await screen.orientation.lock('landscape'); }catch{}
   state.me._mobileRotateOpen = true;
@@ -269,92 +242,6 @@ document.addEventListener('click', (e)=>{
   return el;
 }
 
-// ===== Overlay pinch-to-zoom controls for local camera (CSS only, stable) =====
-let localZoom = 1, localOffsetX = 0, localOffsetY = 0;
-
-function applyLocalTransforms(){
-  try{
-    // Apply to main tile video
-    const mainVideo = document.querySelector('.tile.me video');
-    if (mainVideo){
-      const mirror = state.settings.camMirror ? ' scaleX(-1)' : '';
-      const flip = state.settings.camFlip ? ' rotate(180deg)' : '';
-      const zoom = `scale(${localZoom})`;
-      const pan = `translate(${localOffsetX}px, ${localOffsetY}px)`;
-      mainVideo.style.transform = mirror + flip + zoom + pan;
-    }
-    // Apply to overlay video if open
-    const ovVideo = document.querySelector('#ovMedia video');
-    if (ovVideo && ov.classList.contains('open')){
-      const mirror = state.settings.camMirror ? ' scaleX(-1)' : '';
-      const flip = state.settings.camFlip ? ' rotate(180deg)' : '';
-      const zoom = `scale(${localZoom})`;
-      const pan = `translate(${localOffsetX}px, ${localOffsetY}px)`;
-      ovVideo.style.transform = mirror + flip + zoom + pan;
-    }
-  }catch{}
-}
-
-function enableOverlayPinchZoom(container){
-  try{
-    let prevDist = 0;
-    let centerX = 0, centerY = 0;
-    // ensure pipeline exists when user starts gestures
-    const ensure = ()=>{ try{ window.ensureProcessedCamActive?.(); }catch{} };
-    // throttle wheel handler
-    let wheelTs = 0;
-    // wheel zoom for desktop touchpads/mouse
-    const onWheel = (e)=>{
-      try{
-        const now = performance.now(); if (now - wheelTs < 50) return; wheelTs = now;
-        if (!e.ctrlKey && Math.abs(e.deltaY)<1) return;
-        const factor = e.deltaY < 0 ? 1.05 : 0.95;
-        ensure();
-        window.setProcessedCamZoom?.((ctx.camProc?.zoom||1) * factor);
-        e.preventDefault();
-      }catch{}
-    };
-    const onTouchStart = (e)=>{
-      ensure();
-      if (e.touches.length===2){
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        prevDist = Math.hypot(dx, dy);
-        centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      }
-    };
-    const onTouchMove = (e)=>{
-      if (e.touches.length===2){
-        e.preventDefault();
-        ensure();
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const dist = Math.hypot(dx, dy);
-        if (prevDist>0){
-          const ratio = Math.max(0.95, Math.min(1.05, dist / prevDist));
-          try{ window.setProcessedCamZoom?.((ctx.camProc?.zoom||1) * ratio); }catch{}
-          // pan by movement of center
-          const cX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-          const cY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-          const host = container.getBoundingClientRect();
-          const nx = ((cX - centerX) / Math.max(1, host.width)) * 1.2;
-          const ny = ((cY - centerY) / Math.max(1, host.height)) * 1.2;
-          try{ window.nudgeProcessedCamOffset?.(nx, ny); }catch{}
-          centerX = cX; centerY = cY;
-        }
-        prevDist = dist;
-      }
-    };
-    const onTouchEnd = ()=>{ prevDist = 0; };
-    container.addEventListener('touchstart', onTouchStart, { passive:false });
-    container.addEventListener('touchmove', onTouchMove, { passive:false });
-    container.addEventListener('touchend', onTouchEnd, { passive:true });
-    container.addEventListener('touchcancel', onTouchEnd, { passive:true });
-    container.addEventListener('wheel', onWheel, { passive:false });
-  }catch{}
-}
-
 export function createRowEl(identity, name){
   const row=document.createElement('div');
   row.className='user';
@@ -412,7 +299,6 @@ export function setTileAspectFromVideo(tile, videoEl){
 
 export function applyCamTransformsTo(el){
   if(!el) return;
-  // Simple transform: just apply mirror/flip from settings, zoom/pan handled separately
   const rot = state.settings.camFlip ? ' rotate(180deg)' : '';
   const mir = state.settings.camMirror ? ' scaleX(-1)' : '';
   el.style.transform = mir + rot;
@@ -1090,31 +976,12 @@ function installVideoARWatchers(){
 installVideoARWatchers();
 document.addEventListener('DOMContentLoaded', installVideoARWatchers);
 
-// Overlay control buttons (global processing for everyone)
-try{
-  ovZoomIn?.addEventListener('click', ()=>{ try{ window.ensureProcessedCamActive?.(); window.setProcessedCamZoom?.((ctx.camProc?.zoom||1)*1.1); }catch{} });
-  ovZoomOut?.addEventListener('click', ()=>{ try{ window.ensureProcessedCamActive?.(); window.setProcessedCamZoom?.((ctx.camProc?.zoom||1)/1.1); }catch{} });
-  ovZoomReset?.addEventListener('click', ()=>{ try{ window.ensureProcessedCamActive?.(); window.setProcessedCamZoom?.(1); window.setProcessedCamOffset?.(0,0); }catch{} });
-  ovMirror?.addEventListener('click', ()=>{ try{ window.ensureProcessedCamActive?.(); const m = !(ctx.camProc?.mirror); window.setProcessedCamMirror?.(m); state.settings.camMirror = m; }catch{} });
-}catch{}
-
 // реагируем на событие из media.js после замены локального трека
 window.addEventListener('app:local-video-replaced', ()=>{
   try{
     layoutUniformGrid();
     setTimeout(layoutUniformGrid, 60);
     setTimeout(layoutUniformGrid, 160);
-    // If overlay is open for our own tile, ensure it shows the latest local video element
-    try{
-      const meId = ctx.room?.localParticipant?.identity;
-      if (ov.classList.contains('open') && ovReturnTile && ovReturnTile.dataset.pid === meId){
-        const cur = document.querySelector('.tile.me video');
-        if (cur && cur !== ovMedia.querySelector('video')){
-          ovMedia.innerHTML = '';
-          ovMedia.appendChild(cur);
-        }
-      }
-    }catch{}
   }catch{}
 });
 

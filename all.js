@@ -71,7 +71,7 @@ const registry = new Map(); // id -> { participant, tile, row, hasVideo, name, i
 let pinnedId=null, isStageFull=false;
 const state={
   me:{ name:'Me', room:'room', share:false, _mobileRotateOpen:false },
-  settings:{ ns:true, ec:true, agc:true, micDevice:'', camDevice:'', camFlip:false, camMirror:false, camFacing:'user', lowQuality:false }
+  settings:{ ns:true, ec:true, agc:true, micDevice:'', camDevice:'', camFlip:false, camFacing:'user', lowQuality:false }
 };
 
 /* ===== Индикаторы качества сети (заглушка под ConnectionQualityChanged) ===== */
@@ -992,7 +992,6 @@ function applyPreviewTransforms(){
   v.style.transform=mir+rot;
 }
 byId('btnCamFlip')?.addEventListener('click', ()=>{ state.settings.camFlip=!state.settings.camFlip; applyPreviewTransforms(); applyCamTransformsToLive(); });
-byId('btnCamMirror')?.addEventListener('click', ()=>{ state.settings.camMirror=!state.settings.camMirror; applyPreviewTransforms(); applyCamTransformsToLive(); });
 
 /* ===== RTT / пинг (ICE) ===== */
 function lkPCs(room){

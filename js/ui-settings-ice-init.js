@@ -187,10 +187,6 @@ byId("btnCamFlip")?.addEventListener("click", ()=>{
   state.settings.camFlip=!state.settings.camFlip;
   applyPreviewTransforms(); applyCamTransformsToLive();
 });
-byId("btnCamMirror")?.addEventListener("click", ()=>{
-  state.settings.camMirror=!state.settings.camMirror;
-  applyPreviewTransforms(); applyCamTransformsToLive();
-});
 
 /* ===== ICE diag (RTT) ===== */
 function lkPCs(room){

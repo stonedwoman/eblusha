@@ -4,7 +4,7 @@ export const state = {
   settings:{
     ns:true, ec:true, agc:true,
     micDevice:'', camDevice:'',
-    camFlip:false, camMirror:false, camFacing:'user'
+    camFlip:false, camFacing:'user'
   }
 };
 
