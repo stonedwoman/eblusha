@@ -212,15 +212,27 @@ function startProcessedPublishFromSourceTrack(sourceTrack){
     proc.active = false;
   };
 
-  // publish/replace
+  // publish/replace and show locally via attach wrapper
   (async()=>{
     try{
       const pub = camPub();
       const me = ctx.room?.localParticipant;
       if (pub){ await pub.replaceTrack(outTrack); }
       else if (me){ await me.publishTrack(outTrack, { source: Track.Source.Camera }); }
-      // Attach processed to local tile for WYSIWYG
-      try{ attachVideoToTile(outTrack, me.identity, true); }catch{}
+      // Attach processed to local tile for WYSIWYG using a lightweight wrapper
+      try{
+        const attachable = {
+          mediaStreamTrack: outTrack,
+          attach(){
+            const v = document.createElement('video');
+            try{ v.setAttribute('muted',''); v.setAttribute('playsinline',''); v.setAttribute('autoplay',''); }catch{}
+            v.muted = true; v.autoplay = true; v.playsInline = true;
+            try{ v.srcObject = new MediaStream([outTrack]); v.play?.(); }catch{}
+            return v;
+          }
+        };
+        attachVideoToTile(attachable, me.identity, true);
+      }catch{}
     }catch(e){ console.warn('processed publish error', e); }
   })();
 
