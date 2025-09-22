@@ -146,7 +146,19 @@ export async function openTileOverlay(tile){
   ovReturnTile = tile;
   ovName.textContent = tile.dataset.name || 'Видео';
   ov.classList.add('open'); ov.setAttribute('aria-hidden','false');
-  ovMedia.innerHTML = ''; ovMedia.appendChild(v);
+  // Always use a cloned video bound to the same stream, so tile and overlay can update independently
+  ovMedia.innerHTML = '';
+  try{
+    const clone = document.createElement('video');
+    clone.autoplay = true; clone.playsInline = true; clone.muted = v.muted;
+    try{ clone.setAttribute('autoplay',''); clone.setAttribute('playsinline',''); if (clone.muted) clone.setAttribute('muted',''); }catch{}
+    const ms = v.srcObject instanceof MediaStream ? v.srcObject : null;
+    if (ms){ clone.srcObject = ms; clone.play?.(); }
+    else if (v.captureStream){
+      try{ const s = v.captureStream(); clone.srcObject = s; clone.play?.(); }catch{}
+    }
+    ovMedia.appendChild(clone);
+  }catch{ ovMedia.appendChild(v); }
   // If this is our own tile, enable pinch-to-zoom controls for processed camera
   try{
     const isMe = tile.dataset.pid === ctx.room?.localParticipant?.identity;
@@ -1065,6 +1077,17 @@ window.addEventListener('app:local-video-replaced', ()=>{
     layoutUniformGrid();
     setTimeout(layoutUniformGrid, 60);
     setTimeout(layoutUniformGrid, 160);
+    // If overlay is open for our own tile, ensure it shows the latest local video element
+    try{
+      const meId = ctx.room?.localParticipant?.identity;
+      if (ov.classList.contains('open') && ovReturnTile && ovReturnTile.dataset.pid === meId){
+        const cur = document.querySelector('.tile.me video');
+        if (cur && cur !== ovMedia.querySelector('video')){
+          ovMedia.innerHTML = '';
+          ovMedia.appendChild(cur);
+        }
+      }
+    }catch{}
   }catch{}
 });
 

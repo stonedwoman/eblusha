@@ -149,7 +149,7 @@ function createHiddenVideoFromTrack(track){
   return v;
 }
 
-function startProcessedPublishFromSourceTrack(sourceTrack){
+export function startProcessedPublishFromSourceTrack(sourceTrack){
   const proc = ensureProcState();
   // cleanup previous
   try{ proc.stop?.(); }catch{}
@@ -165,6 +165,13 @@ function startProcessedPublishFromSourceTrack(sourceTrack){
 
   const outStream = canvas.captureStream?.(30) || canvas.captureStream?.() || null;
   const outTrack = outStream ? (outStream.getVideoTracks?.()[0] || null) : null;
+  try{
+    // keep audio sync metadata if available
+    if (outTrack && srcMst && typeof outTrack.applyConstraints === 'function'){
+      const s2 = srcMst.getSettings?.()||{}; const fps = s2.frameRate||30;
+      try{ Promise.resolve(outTrack.applyConstraints({ frameRate: { ideal: fps } })).catch(()=>{}); }catch{}
+    }
+  }catch{}
 
   // state
   proc.active = true;
@@ -198,7 +205,7 @@ function startProcessedPublishFromSourceTrack(sourceTrack){
         g.drawImage(videoEl, 0, 0, vw, vh, Math.round(cx), Math.round(cy), Math.round(drawW), Math.round(drawH));
         g.restore();
       }
-    }catch{}
+    }catch(e){ /* keep loop even on transient errors */ }
     raf = requestAnimationFrame(draw);
   };
   draw();
@@ -227,11 +234,12 @@ function startProcessedPublishFromSourceTrack(sourceTrack){
             const v = document.createElement('video');
             try{ v.setAttribute('muted',''); v.setAttribute('playsinline',''); v.setAttribute('autoplay',''); }catch{}
             v.muted = true; v.autoplay = true; v.playsInline = true;
-            try{ v.srcObject = new MediaStream([outTrack]); v.play?.(); }catch{}
+            try{ v.srcObject = outStream ? outStream : new MediaStream([outTrack]); v.play?.(); }catch{}
             return v;
           }
         };
         attachVideoToTile(attachable, me.identity, true);
+        try{ window.dispatchEvent(new Event('app:local-video-replaced')); }catch{}
       }catch{}
     }catch(e){ console.warn('processed publish error', e); }
   })();
@@ -519,6 +527,8 @@ export async function toggleFacing(){
           setTimeout(unfreeze, 1600);
         }
       });
+      // Restart processed pipeline from the new raw track so local preview keeps updating
+      try{ const base = camPub()?.track || ctx.localVideoTrack; if (base){ startProcessedPublishFromSourceTrack(base); } }catch{}
     }
     // 2) (отключено) applyConstraints на исходном треке часто сбивает формат до 4:3 — пропускаем
     // 3) Фолбэк — новый трек
@@ -547,6 +557,8 @@ export async function toggleFacing(){
       ctx.localVideoTrack = newTrack;
       applyCamTransformsToLive();
       setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+      // Restart processed pipeline from new track
+      try{ startProcessedPublishFromSourceTrack(newTrack); }catch{}
       // форс-обновление AR локального видео после смены facing
       const arTick2 = ()=>{
         const v = getLocalTileVideo();

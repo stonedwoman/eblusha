@@ -142,7 +142,8 @@ body.no-scroll{overflow:hidden}
 .tile-ov .ov-close{margin-left:auto; display:inline-grid; place-items:center; width:36px; height:36px; border-radius:10px; border:1px solid #444; background:#1f2329; color:#fff; cursor:pointer}
 .tile-ov .ov-body{flex:1; min-height:0; display:grid; place-items:center; padding:10px}
 .tile-ov .ov-media{width:100%; height:100%; display:grid; place-items:center}
-.tile-ov .ov-media video{height:100% !important; width:auto !important; max-width:100%; object-fit:contain; max-height: 80vh; position:static}
+.tile-ov .ov-media{ width:100%; height:100%; display:grid; place-items:center }
+.tile-ov .ov-media video{ width:100% !important; height:auto !important; max-height:80vh; object-fit:contain; position:static }
 /* Controls on overlay */
 .tile-ov .ov-controls{ position:sticky; bottom:0; z-index:5; display:flex; gap:8px; padding:10px; justify-content:center }
 .tile-ov .ov-controls .icon-btn{ width:40px; height:40px }
