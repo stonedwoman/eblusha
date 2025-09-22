@@ -335,6 +335,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
   setShareButtonMode();
   initFootDots();
   refreshControls();
+  // Авто-мираж: фронталка — зеркальная, тыл — обычная
+  try{ state.settings.camMirror = (state.settings.camFacing||"user") === "user"; }catch{}
+  try{ applyPreviewTransforms(); }catch{}
+  try{ applyCamTransformsToLive(); }catch{}
 });
 
 /* controls дергает refresh по кастом-эвенту */

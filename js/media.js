@@ -212,6 +212,11 @@ export async function ensureCameraOn(force=false){
     }
     try { old?.stop?.(); } catch {}
     ctx.localVideoTrack = newTrack;
+    // auto-mirror based on facing
+    try{
+      const facing = state.settings.camFacing || "user";
+      state.settings.camMirror = (facing === "user");
+    }catch{}
     // Зафиксировать 16:9/текущий AR для будущих рестартов
     try{
       const v = getLocalTileVideo();
@@ -311,6 +316,8 @@ export async function toggleCam(){
         else if (typeof pub.setMuted === "function") await pub.setMuted(false);
         else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
       }
+      // auto-mirror based on current facing
+      try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
     } else {
       // Выключение
       let turnedOff = false;
@@ -379,6 +386,8 @@ export async function toggleFacing(){
       // гарантируем, что паблиш не остался в mute
       try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
       state.settings.camFacing = nextFacing;
+      // auto-mirror based on facing
+      try{ state.settings.camMirror = (nextFacing === "user"); }catch{}
       // дёрнем стабилизацию AR/раскладки как при замене трека
       setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
       window.requestAnimationFrame(()=>{
@@ -435,6 +444,7 @@ export async function toggleFacing(){
     applyLayout();
   }catch(e){
     state.settings.camFacing = prevFacing;
+    try{ state.settings.camMirror = (prevFacing === "user"); }catch{}
     console.error("[camera] switch failed:", e);
     alert("Не удалось переключить камеру: " + (e?.message||e));
   }finally{
