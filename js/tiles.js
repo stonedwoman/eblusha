@@ -142,6 +142,11 @@ export async function openTileOverlay(tile){
   ovName.textContent = tile.dataset.name || 'Видео';
   ov.classList.add('open'); ov.setAttribute('aria-hidden','false');
   ovMedia.innerHTML = ''; ovMedia.appendChild(v);
+  // If this is our own tile, enable pinch-to-zoom controls for processed camera
+  try{
+    const isMe = tile.dataset.pid === ctx.room?.localParticipant?.identity;
+    if (isMe){ enableOverlayPinchZoom(ovMedia); }
+  }catch{}
   try{ if(ov.requestFullscreen) await ov.requestFullscreen({ navigationUI:'hide' }); }catch{}
   try{ await screen.orientation.lock('landscape'); }catch{}
   state.me._mobileRotateOpen = true;
@@ -242,6 +247,49 @@ document.addEventListener('click', (e)=>{
   return el;
 }
 
+// ===== Overlay pinch-to-zoom controls for local processed camera =====
+function enableOverlayPinchZoom(container){
+  try{
+    let prevDist = 0;
+    let centerX = 0, centerY = 0;
+    const onTouchStart = (e)=>{
+      if (e.touches.length===2){
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        prevDist = Math.hypot(dx, dy);
+        centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      }
+    };
+    const onTouchMove = (e)=>{
+      if (e.touches.length===2){
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        if (prevDist>0){
+          const ratio = dist / prevDist;
+          try{ window.setProcessedCamZoom?.((ctx.camProc?.zoom||1) * ratio); }catch{}
+          // pan by movement of center
+          const cX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+          const cY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+          const host = container.getBoundingClientRect();
+          const nx = ((cX - centerX) / Math.max(1, host.width)) * 2; // -2..2 → later clamped in setter
+          const ny = ((cY - centerY) / Math.max(1, host.height)) * 2;
+          try{ window.nudgeProcessedCamOffset?.(nx, ny); }catch{}
+          centerX = cX; centerY = cY;
+        }
+        prevDist = dist;
+      }
+    };
+    const onTouchEnd = ()=>{ prevDist = 0; };
+    container.addEventListener('touchstart', onTouchStart, { passive:false });
+    container.addEventListener('touchmove', onTouchMove, { passive:false });
+    container.addEventListener('touchend', onTouchEnd, { passive:true });
+    container.addEventListener('touchcancel', onTouchEnd, { passive:true });
+  }catch{}
+}
+
 export function createRowEl(identity, name){
   const row=document.createElement('div');
   row.className='user';
@@ -299,8 +347,10 @@ export function setTileAspectFromVideo(tile, videoEl){
 
 export function applyCamTransformsTo(el){
   if(!el) return;
+  // If processed pipeline is active, local tile already mirrored in canvas; skip CSS mirror to avoid double
+  const isProcessed = !!(ctx.camProc && ctx.camProc.active);
   const rot = state.settings.camFlip ? ' rotate(180deg)' : '';
-  const mir = state.settings.camMirror ? ' scaleX(-1)' : '';
+  const mir = (state.settings.camMirror && !isProcessed) ? ' scaleX(-1)' : '';
   el.style.transform = mir + rot;
 }
 export function applyCamTransformsToLive(){

@@ -136,6 +136,102 @@ export function isCamActuallyOn(){
 }
 let camBusy = false;
 
+/* ===== Processed camera pipeline (mirror/zoom for everyone) ===== */
+function ensureProcState(){ ctx.camProc = ctx.camProc || {}; return ctx.camProc; }
+
+function createHiddenVideoFromTrack(track){
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.autoplay = true;
+  try{ v.setAttribute('muted',''); v.setAttribute('playsinline',''); v.setAttribute('autoplay',''); }catch{}
+  try{ v.srcObject = new MediaStream([track.mediaStreamTrack||track]); v.play?.(); }catch{}
+  v.style.position='fixed'; v.style.left='-9999px'; v.style.top='-9999px'; v.style.width='1px'; v.style.height='1px'; v.style.opacity='0';
+  document.body.appendChild(v);
+  return v;
+}
+
+function startProcessedPublishFromSourceTrack(sourceTrack){
+  const proc = ensureProcState();
+  // cleanup previous
+  try{ proc.stop?.(); }catch{}
+
+  // canvas setup
+  const srcMst = sourceTrack?.mediaStreamTrack || sourceTrack;
+  const s = srcMst?.getSettings?.() || {};
+  const baseW = (s.width|0) || 1280; const baseH = (s.height|0) || 720;
+  const canvas = document.createElement('canvas');
+  canvas.width = baseW; canvas.height = baseH;
+  const g = canvas.getContext('2d', { alpha:false });
+  const videoEl = createHiddenVideoFromTrack(srcMst);
+
+  const outStream = canvas.captureStream?.(30) || canvas.captureStream?.() || null;
+  const outTrack = outStream ? (outStream.getVideoTracks?.()[0] || null) : null;
+
+  // state
+  proc.active = true;
+  proc.canvas = canvas; proc.ctx2d = g; proc.srcVideo = videoEl; proc.srcTrack = srcMst; proc.outTrack = outTrack;
+  proc.zoom = Math.max(1, Number(proc.zoom)||1);
+  proc.offsetX = Number.isFinite(proc.offsetX)? proc.offsetX : 0; // -1..1
+  proc.offsetY = Number.isFinite(proc.offsetY)? proc.offsetY : 0;
+  proc.mirror = !!state.settings.camMirror; // follow settings
+
+  // draw loop
+  let raf = 0;
+  const draw = ()=>{
+    try{
+      const vw = videoEl.videoWidth|0, vh = videoEl.videoHeight|0;
+      if (vw>0 && vh>0){
+        const cw = canvas.width, ch = canvas.height;
+        g.imageSmoothingEnabled = true;
+        g.imageSmoothingQuality = 'high';
+        g.fillStyle = '#000'; g.fillRect(0,0,cw,ch);
+        g.save();
+        // mirror around center if needed
+        if (proc.mirror){ g.translate(cw, 0); g.scale(-1, 1); }
+        // compute scaled source rect based on zoom and offsets (-1..1 in both axes)
+        const baseScale = Math.min(cw / vw, ch / vh); // cover/contain baseline? choose cover for fixed area
+        // We want to FILL canvas; start from cover scale then apply zoom
+        const coverScale = Math.max(cw / vw, ch / vh);
+        const scale = coverScale * Math.max(1, proc.zoom);
+        const drawW = vw * scale; const drawH = vh * scale;
+        const cx = (cw - drawW) / 2 + (proc.offsetX||0) * cw * 0.25; // allow pan up to 25% of canvas
+        const cy = (ch - drawH) / 2 + (proc.offsetY||0) * ch * 0.25;
+        g.drawImage(videoEl, 0, 0, vw, vh, Math.round(cx), Math.round(cy), Math.round(drawW), Math.round(drawH));
+        g.restore();
+      }
+    }catch{}
+    raf = requestAnimationFrame(draw);
+  };
+  draw();
+
+  proc.stop = ()=>{
+    try{ cancelAnimationFrame(raf); }catch{}
+    try{ videoEl.pause?.(); }catch{}
+    try{ videoEl.srcObject = null; }catch{}
+    try{ videoEl.remove?.(); }catch{}
+    try{ outTrack?.stop?.(); }catch{}
+    proc.active = false;
+  };
+
+  // publish/replace
+  (async()=>{
+    try{
+      const pub = camPub();
+      const me = ctx.room?.localParticipant;
+      if (pub){ await pub.replaceTrack(outTrack); }
+      else if (me){ await me.publishTrack(outTrack, { source: Track.Source.Camera }); }
+      // Attach processed to local tile for WYSIWYG
+      try{ attachVideoToTile(outTrack, me.identity, true); }catch{}
+    }catch(e){ console.warn('processed publish error', e); }
+  })();
+
+  return proc;
+}
+
+export function setProcessedCamMirror(on){ const p = ctx.camProc; if (p && p.active){ p.mirror = !!on; } }
+export function setProcessedCamZoom(z){ const p = ctx.camProc; if (p && p.active){ p.zoom = Math.max(1, Math.min(6, Number(z)||1)); } }
+export function nudgeProcessedCamOffset(dx, dy){ const p = ctx.camProc; if (p && p.active){ p.offsetX = Math.max(-1, Math.min(1, (p.offsetX||0) + dx)); p.offsetY = Math.max(-1, Math.min(1, (p.offsetY||0) + dy)); } }
+export function setProcessedCamOffset(nx, ny){ const p = ctx.camProc; if (p && p.active){ p.offsetX = Math.max(-1, Math.min(1, Number(nx)||0)); p.offsetY = Math.max(-1, Math.min(1, Number(ny)||0)); } }
+
 async function countVideoInputs(){
   try{
     const devs = await navigator.mediaDevices.enumerateDevices();
@@ -203,20 +299,14 @@ export async function ensureCameraOn(force=false){
   const old = ctx.localVideoTrack || camPub()?.track || null;
   try{
     const newTrack = await createLocalVideoTrack(constraints);
+    // auto-mirror based on facing as default
+    try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
+    // Start processed pipeline so mirrored/zoomed stream is published to everyone
+    const proc = startProcessedPublishFromSourceTrack(newTrack);
     const pub = camPub();
-    if (pub){
-      await pub.replaceTrack(newTrack);
-      await (pub.setMuted?.(false) || pub.unmute?.());
-    } else {
-      await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
-    }
+    if (pub){ await (pub.setMuted?.(false) || pub.unmute?.()); }
     try { old?.stop?.(); } catch {}
     ctx.localVideoTrack = newTrack;
-    // auto-mirror based on facing
-    try{
-      const facing = state.settings.camFacing || "user";
-      state.settings.camMirror = (facing === "user");
-    }catch{}
     // Зафиксировать 16:9/текущий AR для будущих рестартов
     try{
       const v = getLocalTileVideo();
@@ -224,7 +314,7 @@ export async function ensureCameraOn(force=false){
       const ar = (w>0 && h>0) ? (w/h) : (ctx.lastVideoPrefs?.aspectRatio || (16/9));
       ctx.lastVideoPrefs = { width: w||undefined, height: h||undefined, aspectRatio: ar };
     }catch{}
-    attachVideoToTile(newTrack, ctx.room.localParticipant.identity, true);
+    // Local tile shows processed output via startProcessedPublishFromSourceTrack
     window.requestAnimationFrame(applyCamTransformsToLive);
     setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
     const arTick = ()=>{
@@ -315,6 +405,12 @@ export async function toggleCam(){
         if (typeof pub.unmute === "function")      await pub.unmute();
         else if (typeof pub.setMuted === "function") await pub.setMuted(false);
         else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
+        // if we already have a raw track published (from previous), start processed pipeline from it
+        try{
+          const current = camPub();
+          const base = current?.track || ctx.localVideoTrack;
+          if (base){ startProcessedPublishFromSourceTrack(base); }
+        }catch{}
       }
       // auto-mirror based on current facing
       try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
