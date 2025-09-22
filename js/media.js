@@ -244,6 +244,15 @@ export function setProcessedCamZoom(z){ const p = ctx.camProc; if (p && p.active
 export function nudgeProcessedCamOffset(dx, dy){ const p = ctx.camProc; if (p && p.active){ p.offsetX = Math.max(-1, Math.min(1, (p.offsetX||0) + dx)); p.offsetY = Math.max(-1, Math.min(1, (p.offsetY||0) + dy)); } }
 export function setProcessedCamOffset(nx, ny){ const p = ctx.camProc; if (p && p.active){ p.offsetX = Math.max(-1, Math.min(1, Number(nx)||0)); p.offsetY = Math.max(-1, Math.min(1, Number(ny)||0)); } }
 
+export function ensureProcessedCamActive(){
+  try{
+    const p = ctx.camProc; if (p && p.active) return true;
+    const base = camPub()?.track || ctx.localVideoTrack;
+    if (base){ startProcessedPublishFromSourceTrack(base); return true; }
+  }catch{}
+  return false;
+}
+
 async function countVideoInputs(){
   try{
     const devs = await navigator.mediaDevices.enumerateDevices();

@@ -262,16 +262,20 @@ function enableOverlayPinchZoom(container){
   try{
     let prevDist = 0;
     let centerX = 0, centerY = 0;
+    // ensure pipeline exists when user starts gestures
+    const ensure = ()=>{ try{ window.ensureProcessedCamActive?.(); }catch{} };
     // wheel zoom for desktop touchpads/mouse
     const onWheel = (e)=>{
       try{
         if (!e.ctrlKey && Math.abs(e.deltaY)<1) return;
         const factor = e.deltaY < 0 ? 1.05 : 0.95;
+        ensure();
         window.setProcessedCamZoom?.((ctx.camProc?.zoom||1) * factor);
         e.preventDefault();
       }catch{}
     };
     const onTouchStart = (e)=>{
+      ensure();
       if (e.touches.length===2){
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -283,6 +287,7 @@ function enableOverlayPinchZoom(container){
     const onTouchMove = (e)=>{
       if (e.touches.length===2){
         e.preventDefault();
+        ensure();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.hypot(dx, dy);
@@ -1048,10 +1053,10 @@ document.addEventListener('DOMContentLoaded', installVideoARWatchers);
 
 // Overlay control buttons
 try{
-  ovZoomIn?.addEventListener('click', ()=>{ try{ window.setProcessedCamZoom?.((ctx.camProc?.zoom||1)*1.1); }catch{} });
-  ovZoomOut?.addEventListener('click', ()=>{ try{ window.setProcessedCamZoom?.((ctx.camProc?.zoom||1)/1.1); }catch{} });
-  ovZoomReset?.addEventListener('click', ()=>{ try{ window.setProcessedCamZoom?.(1); window.setProcessedCamOffset?.(0,0); }catch{} });
-  ovMirror?.addEventListener('click', ()=>{ try{ const m = !(ctx.camProc?.mirror); window.setProcessedCamMirror?.(m); state.settings.camMirror = m; applyCamTransformsToLive(); }catch{} });
+  ovZoomIn?.addEventListener('click', ()=>{ try{ window.ensureProcessedCamActive?.(); window.setProcessedCamZoom?.((ctx.camProc?.zoom||1)*1.1); }catch{} });
+  ovZoomOut?.addEventListener('click', ()=>{ try{ window.ensureProcessedCamActive?.(); window.setProcessedCamZoom?.((ctx.camProc?.zoom||1)/1.1); }catch{} });
+  ovZoomReset?.addEventListener('click', ()=>{ try{ window.ensureProcessedCamActive?.(); window.setProcessedCamZoom?.(1); window.setProcessedCamOffset?.(0,0); }catch{} });
+  ovMirror?.addEventListener('click', ()=>{ try{ window.ensureProcessedCamActive?.(); const m = !(ctx.camProc?.mirror); window.setProcessedCamMirror?.(m); state.settings.camMirror = m; applyCamTransformsToLive(); }catch{} });
 }catch{}
 
 // реагируем на событие из media.js после замены локального трека
