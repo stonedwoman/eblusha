@@ -160,7 +160,9 @@ function captureCurrentVideoPrefs(){
     const w0 = (s.width|0) || (v0?.videoWidth|0) || 0;
     const h0 = (s.height|0) || (v0?.videoHeight|0) || 0;
     const ar0 = (w0>0 && h0>0) ? (w0/h0) : (v0 && v0.videoWidth>0 && v0.videoHeight>0 ? (v0.videoWidth/v0.videoHeight) : undefined);
-    return { width: w0||undefined, height: h0||undefined, aspectRatio: ar0||undefined };
+    const prefs = { width: w0||undefined, height: h0||undefined, aspectRatio: ar0||undefined };
+    try{ ctx.lastVideoPrefs = prefs; }catch{}
+    return prefs;
   }catch{ return { width: undefined, height: undefined, aspectRatio: undefined }; }
 }
 
@@ -184,8 +186,20 @@ export async function ensureCameraOn(force=false){
   const lp = ctx.room?.localParticipant;
   const devId = state.settings.camDevice || await pickCameraDevice(state.settings.camFacing||"user");
 
-  // Fallback: manual track creation with minimal constraints
-  const constraints = devId ? { deviceId:{ exact: devId } } : {};
+  // Предпочтительный набор констрейнтов: устройство/фейсинг + сохранённые префы AR/размера
+  const base = devId
+    ? { deviceId: { exact: devId } }
+    : { facingMode: { ideal: state.settings.camFacing||"user" } };
+  const last = (ctx.lastVideoPrefs||{});
+  const arIdeal = (typeof last.aspectRatio === "number" && last.aspectRatio>0)
+    ? last.aspectRatio
+    : (16/9); // дефолтно просим 16:9, чтобы избежать 4:3
+  const constraints = {
+    ...base,
+    aspectRatio: { ideal: arIdeal },
+    ...(last.width  ? { width:  { ideal: last.width  } } : {}),
+    ...(last.height ? { height: { ideal: last.height } } : {}),
+  };
   const old = ctx.localVideoTrack || camPub()?.track || null;
   try{
     const newTrack = await createLocalVideoTrack(constraints);
@@ -198,6 +212,13 @@ export async function ensureCameraOn(force=false){
     }
     try { old?.stop?.(); } catch {}
     ctx.localVideoTrack = newTrack;
+    // Зафиксировать 16:9/текущий AR для будущих рестартов
+    try{
+      const v = getLocalTileVideo();
+      const w = v?.videoWidth|0, h = v?.videoHeight|0;
+      const ar = (w>0 && h>0) ? (w/h) : (ctx.lastVideoPrefs?.aspectRatio || (16/9));
+      ctx.lastVideoPrefs = { width: w||undefined, height: h||undefined, aspectRatio: ar };
+    }catch{}
     attachVideoToTile(newTrack, ctx.room.localParticipant.identity, true);
     window.requestAnimationFrame(applyCamTransformsToLive);
     setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
