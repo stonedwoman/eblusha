@@ -121,13 +121,18 @@ byId("btnMic")?.addEventListener("click", toggleMic);
 
 /* ===== CAMERA ===== */
 export function isCamActuallyOn(){
+  // Сначала доверяем реальному треку публикации — это надёжнее,
+  // т.к. мы можем включать/выключать камеру не через setCameraEnabled
+  const pub = camPub();
+  if (pub){
+    const trackEnabled = (pub.track?.isEnabled !== false);
+    return pub.isMuted === false && trackEnabled;
+  }
+  // Фолбэк — API участника (может быть неточным, если не используем setCameraEnabled)
   const lp = ctx.room?.localParticipant;
   if (lp && typeof lp.isCameraEnabled === "boolean") return lp.isCameraEnabled;
   if (lp && typeof lp.isCameraEnabled === "function") { try { return !!lp.isCameraEnabled(); } catch {} }
-  const pub = camPub();
-  if (!pub) return false;
-  const trackEnabled = (pub.track?.isEnabled !== false);
-  return pub.isMuted === false && trackEnabled;
+  return false;
 }
 let camBusy = false;
 
@@ -268,22 +273,49 @@ export async function toggleCam(){
     const lp = ctx.room.localParticipant;
     const targetOn = !isCamActuallyOn();
     let pub = camPub();
-    if (!pub){
-      if (targetOn){
-        try{ await ensureCameraOn(true); }catch{}
+    if (targetOn){
+      // Включение
+      if (!pub){
+        try{
+          if (typeof lp?.setCameraEnabled === "function"){
+            await lp.setCameraEnabled(true, { videoCaptureDefaults:{ deviceId: (state.settings.camDevice||undefined) } });
+          } else {
+            await ensureCameraOn(true);
+          }
+        }catch{}
         pub = camPub();
-      }
-    } else {
-      if (targetOn){
+      } else {
+        if (typeof lp?.setCameraEnabled === "function"){ try{ await lp.setCameraEnabled(true); }catch{} }
         if (typeof pub.unmute === "function")      await pub.unmute();
         else if (typeof pub.setMuted === "function") await pub.setMuted(false);
         else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
-      } else {
-        if (typeof pub.mute === "function")         await pub.mute();
-        else if (typeof pub.setMuted === "function") await pub.setMuted(true);
-        else if (pub.track?.setEnabled)              pub.track.setEnabled(false);
-        showAvatarInTile(lp.identity);
       }
+    } else {
+      // Выключение
+      let turnedOff = false;
+      try{
+        if (typeof lp?.setCameraEnabled === "function"){ await lp.setCameraEnabled(false); turnedOff = true; }
+      }catch{}
+      // Если LP-API не сработал — жёстко отписываем трек
+      pub = camPub();
+      if (!turnedOff){
+        if (pub){
+          try{
+            const track = pub.track;
+            if (track){
+              try{ await ctx.room?.localParticipant?.unpublishTrack(track); }catch{}
+              try{ track.stop?.(); }catch{}
+            }
+          }catch{}
+          try{
+            if (typeof pub.mute === "function")         await pub.mute();
+            else if (typeof pub.setMuted === "function") await pub.setMuted(true);
+            else if (pub.track?.setEnabled)              pub.track.setEnabled(false);
+          }catch{}
+        }
+      }
+      try{ ctx.localVideoTrack = null; }catch{}
+      showAvatarInTile(lp.identity);
     }
     applyLayout();
   }catch(e){
