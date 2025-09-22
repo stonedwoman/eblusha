@@ -276,9 +276,12 @@ function enableOverlayPinchZoom(container){
     let centerX = 0, centerY = 0;
     // ensure pipeline exists when user starts gestures
     const ensure = ()=>{ try{ window.ensureProcessedCamActive?.(); }catch{} };
+    // throttle wheel handler
+    let wheelTs = 0;
     // wheel zoom for desktop touchpads/mouse
     const onWheel = (e)=>{
       try{
+        const now = performance.now(); if (now - wheelTs < 24) return; wheelTs = now;
         if (!e.ctrlKey && Math.abs(e.deltaY)<1) return;
         const factor = e.deltaY < 0 ? 1.05 : 0.95;
         ensure();
@@ -304,14 +307,14 @@ function enableOverlayPinchZoom(container){
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.hypot(dx, dy);
         if (prevDist>0){
-          const ratio = dist / prevDist;
+          const ratio = Math.max(0.92, Math.min(1.08, dist / prevDist));
           try{ window.setProcessedCamZoom?.((ctx.camProc?.zoom||1) * ratio); }catch{}
           // pan by movement of center
           const cX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
           const cY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
           const host = container.getBoundingClientRect();
-          const nx = ((cX - centerX) / Math.max(1, host.width)) * 2; // -2..2 → later clamped in setter
-          const ny = ((cY - centerY) / Math.max(1, host.height)) * 2;
+          const nx = ((cX - centerX) / Math.max(1, host.width)) * 1.2; // dampen
+          const ny = ((cY - centerY) / Math.max(1, host.height)) * 1.2;
           try{ window.nudgeProcessedCamOffset?.(nx, ny); }catch{}
           centerX = cX; centerY = cY;
         }

@@ -248,14 +248,24 @@ export function startProcessedPublishFromSourceTrack(sourceTrack){
 }
 
 export function setProcessedCamMirror(on){ const p = ctx.camProc; if (p && p.active){ p.mirror = !!on; } }
-export function setProcessedCamZoom(z){ const p = ctx.camProc; if (p && p.active){ p.zoom = Math.max(1, Math.min(6, Number(z)||1)); } }
-export function nudgeProcessedCamOffset(dx, dy){ const p = ctx.camProc; if (p && p.active){ p.offsetX = Math.max(-1, Math.min(1, (p.offsetX||0) + dx)); p.offsetY = Math.max(-1, Math.min(1, (p.offsetY||0) + dy)); } }
+export function setProcessedCamZoom(z){
+  const p = ctx.camProc; if (!p || !p.active) return;
+  const target = Math.max(1, Math.min(6, Number(z)||1));
+  p.zoom = target;
+}
+export function nudgeProcessedCamOffset(dx, dy){
+  const p = ctx.camProc; if (!p || !p.active) return;
+  // dampen deltas to avoid huge jumps on fast gestures
+  const k = 0.6;
+  p.offsetX = Math.max(-1, Math.min(1, (p.offsetX||0) + (dx*k)));
+  p.offsetY = Math.max(-1, Math.min(1, (p.offsetY||0) + (dy*k)));
+}
 export function setProcessedCamOffset(nx, ny){ const p = ctx.camProc; if (p && p.active){ p.offsetX = Math.max(-1, Math.min(1, Number(nx)||0)); p.offsetY = Math.max(-1, Math.min(1, Number(ny)||0)); } }
 
 export function ensureProcessedCamActive(){
   try{
     const p = ctx.camProc; if (p && p.active) return true;
-    const base = camPub()?.track || ctx.localVideoTrack;
+    const base = ctx.localVideoTrack;
     if (base){ startProcessedPublishFromSourceTrack(base); return true; }
   }catch{}
   return false;
