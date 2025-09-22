@@ -340,12 +340,14 @@ export async function ensureCameraOn(force=false){
     const newTrack = await createLocalVideoTrack(constraints);
     // auto-mirror based on facing as default
     try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
+    
+    ctx.localVideoTrack = newTrack;
+    
     // Start processed pipeline so mirrored/zoomed stream is published to everyone
     const proc = startProcessedPublishFromSourceTrack(newTrack);
-    const pub = camPub();
-    if (pub){ await (pub.setMuted?.(false) || pub.unmute?.()); }
+    
     try { old?.stop?.(); } catch {}
-    ctx.localVideoTrack = newTrack;
+    
     // Зафиксировать 16:9/текущий AR для будущих рестартов
     try{
       const v = getLocalTileVideo();
@@ -353,7 +355,7 @@ export async function ensureCameraOn(force=false){
       const ar = (w>0 && h>0) ? (w/h) : (ctx.lastVideoPrefs?.aspectRatio || (16/9));
       ctx.lastVideoPrefs = { width: w||undefined, height: h||undefined, aspectRatio: ar };
     }catch{}
-    // Local tile shows processed output via startProcessedPublishFromSourceTrack
+    
     window.requestAnimationFrame(applyCamTransformsToLive);
     setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
     const arTick = ()=>{
@@ -444,10 +446,9 @@ export async function toggleCam(){
         if (typeof pub.unmute === "function")      await pub.unmute();
         else if (typeof pub.setMuted === "function") await pub.setMuted(false);
         else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
-        // if we already have a raw track published (from previous), start processed pipeline from it
+        // if we already have a raw track, restart processed pipeline from it
         try{
-          const current = camPub();
-          const base = current?.track || ctx.localVideoTrack;
+          const base = ctx.localVideoTrack;
           if (base){ startProcessedPublishFromSourceTrack(base); }
         }catch{}
       }
