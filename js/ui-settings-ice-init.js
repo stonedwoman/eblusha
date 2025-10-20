@@ -130,6 +130,7 @@ export async function applySettingsFromModal(closeAfter){
       const constraints = {
         ...(devId ? { deviceId:{ exact: devId } } : { facingMode: { ideal: state.settings.camFacing||"user" } }),
         aspectRatio: { ideal: arIdeal },
+        frameRate: { ideal: 30, min: 15 },
         ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
         ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
       };
@@ -139,6 +140,7 @@ export async function applySettingsFromModal(closeAfter){
       const isMobile = /Android|iPhone|iPad|iPod|Mobile|Silk/i.test(ua);
       if (isMobile){ try{ oldV?.stop?.(); }catch{} }
       const newCam = await createLocalVideoTrack(constraints);
+      try{ if (newCam?.mediaStreamTrack) newCam.mediaStreamTrack.contentHint = 'motion'; }catch{}
       await cp.replaceTrack(newCam);
       await (cp.setMuted?.(false) || cp.unmute?.());
       if (!isMobile){ try{ oldV?.stop?.(); }catch{} }

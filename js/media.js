@@ -217,6 +217,7 @@ export async function ensureCameraOn(force=false){
   const constraints = {
     ...base,
     aspectRatio: { ideal: arIdeal },
+    frameRate: { ideal: 30, min: 15 },
     ...(last.width  ? { width:  { ideal: last.width  } } : {}),
     ...(last.height ? { height: { ideal: last.height } } : {}),
   };
@@ -226,6 +227,7 @@ export async function ensureCameraOn(force=false){
   if (shouldPreStop && old){ try{ old.stop?.(); }catch{} }
   try{
     const newTrack = await createLocalVideoTrack(constraints);
+    try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
     // Если за время ожидания стартанул другой create — закрываем этот трек и выходим
     if (myNonce !== camCreateNonce){ try{ newTrack.stop?.(); }catch{}; return; }
     const pub = camPub();
@@ -413,6 +415,7 @@ export async function toggleFacing(){
       await ctx.localVideoTrack.restartTrack({
         facingMode: nextFacing,
         aspectRatio: { ideal: arIdeal },
+        frameRate: { ideal: 30, min: 15 },
         ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
         ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
       });
@@ -449,6 +452,7 @@ export async function toggleFacing(){
       const constraints = {
         ...(picked ? { deviceId: { exact: picked } } : { facingMode: { ideal: nextFacing } }),
         aspectRatio: { ideal: arIdeal },
+        frameRate: { ideal: 30, min: 15 },
         ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
         ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
       };
@@ -456,6 +460,7 @@ export async function toggleFacing(){
       const shouldPreStop = isMobileUA();
       if (shouldPreStop){ try { ctx.localVideoTrack?.stop?.(); } catch {} }
       const newTrack = await createLocalVideoTrack(constraints);
+      try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
       const meId = ctx.room.localParticipant.identity;
       const pub = camPub();
 
