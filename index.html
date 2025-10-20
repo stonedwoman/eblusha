@@ -10,14 +10,6 @@
       media="(max-width: 640px) and (orientation: portrait)">
 <link rel="stylesheet" href="./css/styles-mobile-l.css"
       media="(max-width: 950px) and (hover:none) and (pointer:coarse) and (orientation: landscape)">
-
-  <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#0b0b0f">
-  <!-- iOS PWA -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <meta name="apple-mobile-web-app-title" content="Еблуша">
 </head>
 <body>
 
@@ -161,11 +153,5 @@
 </div>
 
 <script type="module" src="./js/main.js"></script>
-<script>
-// Service Worker registration
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(console.error);
-}
-</script>
 </body>
 </html>
