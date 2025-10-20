@@ -139,7 +139,11 @@ export async function applySettingsFromModal(closeAfter){
       const ua = navigator.userAgent||navigator.vendor||"";
       const isMobile = /Android|iPhone|iPad|iPod|Mobile|Silk/i.test(ua);
       if (isMobile){ try{ oldV?.stop?.(); }catch{} }
-      const newCam = await createLocalVideoTrack(constraints);
+      const createWithTimeout = (ms)=> Promise.race([
+        createLocalVideoTrack(constraints),
+        new Promise((_,rej)=> setTimeout(()=> rej(new Error('camera-create-timeout')), ms))
+      ]);
+      const newCam = await createWithTimeout(3500);
       try{ if (newCam?.mediaStreamTrack) newCam.mediaStreamTrack.contentHint = 'motion'; }catch{}
       try{ await (async()=>{
         const { desiredAspectRatio } = await import('./media.js');

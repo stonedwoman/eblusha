@@ -142,10 +142,18 @@ function installLocalVideoTrackGuards(track){
   try{
     const mst = track?.mediaStreamTrack;
     if (!mst) return;
-    // Если камера пропала/доступ потерян — пробуем восстановить текущими настройками
+    // Если камера пропала/доступ потерян — пробуем восстановить текущими настройками,
+    // но только если это актуальный MST и мы не в процессе переключения
     const onEnded = async ()=>{
       try{
         if (!ctx.room) return;
+        if (ctx._camSwitching) return;
+        if (document.visibilityState === 'hidden') return;
+        const cur = (camPub()?.track || ctx.localVideoTrack)?.mediaStreamTrack;
+        if (cur && cur !== mst) return;
+        const now = Date.now();
+        if (typeof ctx._lastCamRecoverTs === 'number' && (now - ctx._lastCamRecoverTs) < 1500) return;
+        ctx._lastCamRecoverTs = now;
         // мягкая попытка восстановить с тем же facing
         await ensureCameraOn(true);
       }catch{}
@@ -288,7 +296,12 @@ export async function ensureCameraOn(force=false){
   const shouldPreStop = isMobileUA();
   if (shouldPreStop && old){ try{ old.stop?.(); }catch{} }
   try{
-    const newTrack = await createLocalVideoTrack(constraints);
+    // Ограничим время createLocalVideoTrack, чтобы не зависнуть при подвисшей камере
+    const createWithTimeout = (ms)=> Promise.race([
+      createLocalVideoTrack(constraints),
+      new Promise((_,rej)=> setTimeout(()=> rej(new Error('camera-create-timeout')), ms))
+    ]);
+    const newTrack = await createWithTimeout(3500);
     try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
     try{ await tuneTrackToOrientation(newTrack, ctx.lastVideoPrefs||{}); }catch{}
     // Если за время ожидания стартанул другой create — закрываем этот трек и выходим
@@ -327,6 +340,16 @@ export async function ensureCameraOn(force=false){
     const ticks = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
     ticks.forEach(ms=> setTimeout(arTick, ms));
   }catch(e){
+    console.error('[camera] ensureCameraOn failed:', e);
+    // если завис create — попробуем мягкий откат через restart/enable API
+    try{
+      const lp = ctx.room?.localParticipant;
+      if (typeof lp?.setCameraEnabled === 'function'){
+        await lp.setCameraEnabled(false);
+        await new Promise(res=> setTimeout(res, 120));
+        await lp.setCameraEnabled(true, { videoCaptureDefaults: buildVideoDefaults() });
+      }
+    }catch{}
     alert("Не удалось включить камеру: "+(e?.message||e));
   } finally {
     camBusy = false;
@@ -525,7 +548,12 @@ export async function toggleFacing(){
       // На мобильных сначала освободим текущую камеру, чтобы избежать ошибки доступа
       const shouldPreStop = isMobileUA();
       if (shouldPreStop){ try { ctx.localVideoTrack?.stop?.(); } catch {} }
-      const newTrack = await createLocalVideoTrack(constraints);
+      // Таймаут на создание трека, чтобы избежать зависания и повторов
+      const createWithTimeout = (ms)=> Promise.race([
+        createLocalVideoTrack(constraints),
+        new Promise((_,rej)=> setTimeout(()=> rej(new Error('camera-create-timeout')), ms))
+      ]);
+      const newTrack = await createWithTimeout(3500);
       try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
       try{ await tuneTrackToOrientation(newTrack, prefs||{}); }catch{}
       try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
