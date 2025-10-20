@@ -125,23 +125,14 @@ export async function applySettingsFromModal(closeAfter){
     const cp = camPub();
     if (cp && isCamActuallyOn()){
       const devId = state.settings.camDevice || null;
-      const prefs = (ctx.lastVideoPrefs||{});
-      const arIdeal = (typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : (16/9);
-      const constraints = {
-        ...(devId ? { deviceId:{ exact: devId } } : { facingMode: { ideal: state.settings.camFacing||"user" } }),
-        aspectRatio: { ideal: arIdeal },
-        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-      };
+      const constraints = devId
+        ? { deviceId:{ exact: devId } }
+        : { facingMode: { ideal: state.settings.camFacing||"user" } };
       const oldV = ctx.localVideoTrack || cp.track;
-      // На мобильных устройство часто блокируется, если открыть новую камеру до остановки старой
-      const ua = navigator.userAgent||navigator.vendor||"";
-      const isMobile = /Android|iPhone|iPad|iPod|Mobile|Silk/i.test(ua);
-      if (isMobile){ try{ oldV?.stop?.(); }catch{} }
       const newCam = await createLocalVideoTrack(constraints);
       await cp.replaceTrack(newCam);
       await (cp.setMuted?.(false) || cp.unmute?.());
-      if (!isMobile){ try{ oldV?.stop?.(); }catch{} }
+      try{ oldV?.stop?.(); }catch{}
       ctx.localVideoTrack=newCam;
       // локальная плитка
       applyCamTransformsToLive();

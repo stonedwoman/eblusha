@@ -135,25 +135,6 @@ export function isCamActuallyOn(){
   return false;
 }
 let camBusy = false;
-// Защита от параллельных createLocalVideoTrack: инкрементируем токен операции
-let camCreateNonce = 0;
-
-function installLocalVideoTrackGuards(track){
-  try{
-    const mst = track?.mediaStreamTrack;
-    if (!mst) return;
-    // Если камера пропала/доступ потерян — пробуем восстановить текущими настройками
-    const onEnded = async ()=>{
-      try{
-        if (!ctx.room) return;
-        // мягкая попытка восстановить с тем же facing
-        await ensureCameraOn(true);
-      }catch{}
-    };
-    mst.addEventListener('ended', onEnded);
-    mst.addEventListener('mute',  ()=>{/* ignore; LK pub.mute обработается отдельно */});
-  }catch{}
-}
 
 async function countVideoInputs(){
   try{
@@ -202,7 +183,6 @@ export async function ensureCameraOn(force=false){
   if (!ctx.room) return;
   if (camBusy && !force) return; // защита от повторного входа/зацикливания
   camBusy = true;
-  const myNonce = ++camCreateNonce;
   const lp = ctx.room?.localParticipant;
   const devId = state.settings.camDevice || await pickCameraDevice(state.settings.camFacing||"user");
 
@@ -221,13 +201,8 @@ export async function ensureCameraOn(force=false){
     ...(last.height ? { height: { ideal: last.height } } : {}),
   };
   const old = ctx.localVideoTrack || camPub()?.track || null;
-  // На мобильных (особенно Android) перед открытием новой камеры освобождаем ресурс старого трека
-  const shouldPreStop = isMobileUA();
-  if (shouldPreStop && old){ try{ old.stop?.(); }catch{} }
   try{
     const newTrack = await createLocalVideoTrack(constraints);
-    // Если за время ожидания стартанул другой create — закрываем этот трек и выходим
-    if (myNonce !== camCreateNonce){ try{ newTrack.stop?.(); }catch{}; return; }
     const pub = camPub();
     if (pub){
       await pub.replaceTrack(newTrack);
@@ -235,9 +210,8 @@ export async function ensureCameraOn(force=false){
     } else {
       await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
     }
-    if (!shouldPreStop){ try { old?.stop?.(); } catch {} }
+    try { old?.stop?.(); } catch {}
     ctx.localVideoTrack = newTrack;
-    installLocalVideoTrackGuards(newTrack);
     // auto-mirror based on facing
     try{
       const facing = state.settings.camFacing || "user";
@@ -394,10 +368,6 @@ export async function toggleFacing(){
   const nextFacing = prevFacing === "user" ? "environment" : "user";
 
   try{
-    // Сохраняем текущие преференции (размер/AR), чтобы удержать 16:9 после переключения
-    const prefs = captureCurrentVideoPrefs();
-    const arIdeal = (typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : (16/9);
-
     // 1) мягкий путь — restartTrack, если есть
     if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
       // freeze AR while switching
@@ -409,20 +379,15 @@ export async function toggleFacing(){
           tile0.dataset.freezeAr = String(ar0);
         }
       }catch{}
-      // Просим сохранить 16:9 (или прежний AR), плюс текущие предпочтительные размеры
-      await ctx.localVideoTrack.restartTrack({
-        facingMode: nextFacing,
-        aspectRatio: { ideal: arIdeal },
-        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-      });
+      const prefs = captureCurrentVideoPrefs();
+      const base = { facingMode: nextFacing };
+      // как в тесте — минимум констрейнтов при рестарте
+      await ctx.localVideoTrack.restartTrack({ facingMode: nextFacing });
       // гарантируем, что паблиш не остался в mute
       try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
       state.settings.camFacing = nextFacing;
       // auto-mirror based on facing
       try{ state.settings.camMirror = (nextFacing === "user"); }catch{}
-      // переустановим защиты на новый MST (после restart он меняется под капотом)
-      try{ if (ctx.localVideoTrack) installLocalVideoTrackGuards(ctx.localVideoTrack); }catch{}
       // дёрнем стабилизацию AR/раскладки как при замене трека
       setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
       window.requestAnimationFrame(()=>{
@@ -445,16 +410,9 @@ export async function toggleFacing(){
       state.settings.camDevice = ""; // дать браузеру выбрать
 
       const picked = await pickCameraDevice(nextFacing);
-      // Базово выбираем устройство/фейсинг, добавляем AR 16:9 и предпочтительные размеры
-      const constraints = {
-        ...(picked ? { deviceId: { exact: picked } } : { facingMode: { ideal: nextFacing } }),
-        aspectRatio: { ideal: arIdeal },
-        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-      };
-      // На мобильных сначала освободим текущую камеру, чтобы избежать ошибки доступа
-      const shouldPreStop = isMobileUA();
-      if (shouldPreStop){ try { ctx.localVideoTrack?.stop?.(); } catch {} }
+      // Минимальные констрейнты, как в тесте: только deviceId или facingMode
+      const constraints = picked ? { deviceId: { exact: picked } }
+                                 : { facingMode: { ideal: nextFacing } };
       const newTrack = await createLocalVideoTrack(constraints);
       const meId = ctx.room.localParticipant.identity;
       const pub = camPub();
@@ -463,14 +421,13 @@ export async function toggleFacing(){
 
       if (pub) {
         await pub.replaceTrack(newTrack);
-        if (!shouldPreStop){ try { ctx.localVideoTrack?.stop(); } catch {} }
+        try { ctx.localVideoTrack?.stop(); } catch {}
         try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{}
       } else {
         await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
       }
 
       ctx.localVideoTrack = newTrack;
-      installLocalVideoTrackGuards(newTrack);
       applyCamTransformsToLive();
       setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
       // форс-обновление AR локального видео после смены facing

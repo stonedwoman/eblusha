@@ -458,6 +458,8 @@ export function showAvatarInTile(identity){
 
 export function attachAudioTrack(track, baseId){
   const el=track.attach();
+  try{ el.autoplay = true; el.setAttribute('autoplay',''); }catch{}
+  try{ el.setAttribute?.('playsinline',''); }catch{}
   el.style.display='none';
   document.body.appendChild(el);
 

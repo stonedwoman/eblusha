@@ -30,7 +30,7 @@ function randName(){ return 'u' + Math.random().toString(36).slice(2, 8); }
 function tokenUrl(){
   try{
     // Если страница открыта как file:// — используем абсолютный URL к токен-эндпоинту
-    if (!/^https?:/i.test(location.protocol)) return 'https://eblusha.org/token';
+    if (!/^https?:/i.test(location.protocol)) return 'https://voice.eblusha.org/token';
   }catch{}
   return TOKEN_ENDPOINT;
 }
