@@ -170,6 +170,7 @@ export async function connectLiveKit(token){
       showAvatarInTile(p.identity);
       markHasVideo(p.identity, false);
       ctx.localVideoTrack = null;
+      try{ ctx.sharedVideoFormat = null; }catch{}
       applyLayout();
     }
     refreshControls();

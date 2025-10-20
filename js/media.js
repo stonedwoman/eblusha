@@ -272,6 +272,10 @@ export async function ensureCameraOn(force=false){
   // Если пользователь не просил включать камеру — не делаем автозапуск
   if (ctx.camDesiredOn === false && !force) return;
   camBusy = true;
+  // на входе очищаем потенциальные зависшие превью/локальные ресурсы (кроме опубликованного)
+  try{
+    if (ctx.previewTrack){ try{ ctx.previewTrack.stop?.(); }catch{}; try{ ctx.previewTrack.detach?.()?.remove?.(); }catch{}; ctx.previewTrack = null; }
+  }catch{}
   const myNonce = ++camCreateNonce;
   const lp = ctx.room?.localParticipant;
   const devId = state.settings.camDevice || await pickCameraDevice(state.settings.camFacing||"user");
@@ -422,6 +426,8 @@ export async function toggleCam(){
       try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
     } else {
       // Выключение
+      // Сбросим любые незавершённые открытия/переключения камеры
+      try{ camCreateNonce++; ctx._camSwitching = false; ctx.camDesiredOn = false; }catch{}
       let turnedOff = false;
       try{
         if (typeof lp?.setCameraEnabled === "function"){ await lp.setCameraEnabled(false); turnedOff = true; }
@@ -445,6 +451,7 @@ export async function toggleCam(){
         }
       }
       try{ ctx.localVideoTrack = null; }catch{}
+      try{ ctx.lastVideoPrefs = null; }catch{}
       showAvatarInTile(lp.identity);
     }
     applyLayout();
