@@ -41,8 +41,7 @@
 - `js/layout/layout.mobile-portrait.js` — мобильный портрет (мозаика)
 - `js/layout/layout.mobile-landscape.js` — мобильный ландшафт (равномерная сетка)
 
-### **Основные модули:**
-- `js/livekit-connection.js` — подключение к LiveKit
+### **Основные модули:** 
 - `js/tiles.js` — управление видео-тайлами
 - `js/media.js` — работа с камерой/микрофоном
 - `js/chat-session.js` — чат система
