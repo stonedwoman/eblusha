@@ -61,6 +61,17 @@ export async function connectLiveKit(token){
         pub.source===Track.Source.ScreenShare ? 'Экран' : undefined);
       markHasVideo(participant.identity, true);
 
+      // Зафиксируем «общее» соотношение сторон по первому реальному удалённому видео
+      try{
+        if (!participant.isLocal && !ctx.sharedVideoFormat){
+          const mst = track.mediaStreamTrack;
+          const s = mst?.getSettings?.() || {};
+          const w = (s.width|0) || track?.attachedElements?.[0]?.videoWidth|0;
+          const h = (s.height|0)|| track?.attachedElements?.[0]?.videoHeight|0;
+          if (w>0 && h>0){ ctx.sharedVideoFormat = { width:w, height:h, aspect: w/h }; }
+        }
+      }catch{}
+
       const media = track.mediaStreamTrack;
       if (media){
         media.addEventListener('ended', ()=>{
@@ -148,6 +159,12 @@ export async function connectLiveKit(token){
       try{
         // Убедимся, что публикация действительно в unmute после повторного включения
         (async()=>{ try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{} })();
+      }catch{}
+      try{
+        // Если уже знаем «общий» формат — подстройка только AR, без навязывания портрет/альбом
+        const f = ctx.sharedVideoFormat;
+        const mst = pub.track?.mediaStreamTrack;
+        if (f && mst?.applyConstraints){ await mst.applyConstraints({ aspectRatio: { ideal: f.aspect } }); }
       }catch{}
     }
     refreshControls();

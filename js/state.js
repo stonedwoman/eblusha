@@ -12,6 +12,7 @@ export const ctx = {
   room: null,
   localAudioTrack: null,
   localVideoTrack: null,
+  sharedVideoFormat: null,
   screenTracks: [],
   pingTimer: null,
   statsPC: null,

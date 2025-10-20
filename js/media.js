@@ -282,9 +282,11 @@ export async function ensureCameraOn(force=false){
     ? { deviceId: { exact: devId } }
     : { facingMode: { ideal: state.settings.camFacing||"user" } };
   const last = (ctx.lastVideoPrefs||{});
-  const arIdeal = (typeof last.aspectRatio === "number" && last.aspectRatio>0)
-    ? last.aspectRatio
-    : desiredAspectRatio();
+  const shared = ctx.sharedVideoFormat;
+  const arIdeal = (typeof shared?.aspect === 'number' && shared.aspect>0)
+    ? shared.aspect
+    : ((typeof last.aspectRatio === "number" && last.aspectRatio>0)
+      ? last.aspectRatio : desiredAspectRatio());
   const constraints = {
     ...base,
     aspectRatio: { ideal: arIdeal },
@@ -490,7 +492,10 @@ export async function toggleFacing(){
   try{
     // Сохраняем текущие преференции (размер/AR), чтобы удержать 16:9 после переключения
     const prefs = captureCurrentVideoPrefs();
-    const arIdeal = (typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : desiredAspectRatio();
+    const shared = ctx.sharedVideoFormat;
+    const arIdeal = (typeof shared?.aspect === 'number' && shared.aspect>0)
+      ? shared.aspect
+      : ((typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : desiredAspectRatio());
 
     // 1) мягкий путь — restartTrack, если есть
     if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
