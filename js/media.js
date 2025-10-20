@@ -268,7 +268,7 @@ export async function pickCameraDevice(facing){
 
 export async function ensureCameraOn(force=false){
   if (!ctx.room) return;
-  if (camBusy && !force) return; // защита от повторного входа/зацикливания
+  if (camBusy) return; // всегда предотвращаем параллельные включения
   // Если пользователь не просил включать камеру — не делаем автозапуск
   if (ctx.camDesiredOn === false && !force) return;
   camBusy = true;
@@ -304,8 +304,9 @@ export async function ensureCameraOn(force=false){
     if (myNonce !== camCreateNonce){ try{ newTrack.stop?.(); }catch{}; return; }
     const pub = camPub();
     if (pub){
-      await pub.replaceTrack(newTrack);
-      await (pub.setMuted?.(false) || pub.unmute?.());
+      try{ await pub.replaceTrack(newTrack); }
+      catch(e){ try{ await ctx.room.localParticipant.unpublishTrack(pub.track); }catch{}; await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera }); }
+      try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{}
     } else {
       await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
     }
@@ -555,7 +556,8 @@ export async function toggleFacing(){
       attachVideoToTile(newTrack, meId, true);
 
       if (pub) {
-        await pub.replaceTrack(newTrack);
+        try{ await pub.replaceTrack(newTrack); }
+        catch(e){ try{ await ctx.room.localParticipant.unpublishTrack(pub.track); }catch{}; await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera }); }
         if (!shouldPreStop){ try { ctx.localVideoTrack?.stop(); } catch {} }
         try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{}
       } else {

@@ -123,6 +123,15 @@ export async function connectLiveKit(token){
           }
         }catch{}
       });
+
+  // Если публикуется локальная камера и статус mute у публикации отличается от трека — синхронизируем
+  ctx.room.on(RoomEvent.LocalTrackPublished,   async (pub,p)=>{
+    if(pub?.source===Track.Source.Camera && p?.isLocal && pub.track){
+      try{
+        if (pub.isMuted && pub.track?.isEnabled !== false){ await pub.unmute?.(); }
+      }catch{}
+    }
+  });
     }
   }catch{}
 
