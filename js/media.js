@@ -201,6 +201,22 @@ async function tuneTrackToOrientation(track, prefs={}){
   }catch{}
 }
 
+function buildVideoDefaults(){
+  try{
+    const devId = state.settings.camDevice || undefined;
+    const prefs = ctx.lastVideoPrefs || {};
+    const sz = computeSizeForOrientation(prefs);
+    const out = {
+      ...(devId ? { deviceId: { exact: devId } } : {}),
+      aspectRatio: { ideal: sz.aspect },
+      frameRate: { ideal: 30, min: 15 },
+      width:  { ideal: sz.width },
+      height: { ideal: sz.height },
+    };
+    return out;
+  }catch{ return {}; }
+}
+
 async function countVideoInputs(){
   try{
     const devs = await navigator.mediaDevices.enumerateDevices();
@@ -379,7 +395,7 @@ export async function toggleCam(){
       if (!pub){
         try{
           if (typeof lp?.setCameraEnabled === "function"){
-            await lp.setCameraEnabled(true, { videoCaptureDefaults:{ deviceId: (state.settings.camDevice||undefined) } });
+            await lp.setCameraEnabled(true, { videoCaptureDefaults: buildVideoDefaults() });
           } else {
             await ensureCameraOn(true);
           }
@@ -390,6 +406,7 @@ export async function toggleCam(){
         if (typeof pub.unmute === "function")      await pub.unmute();
         else if (typeof pub.setMuted === "function") await pub.setMuted(false);
         else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
+        try{ await tuneTrackToOrientation(pub.track || ctx.localVideoTrack, ctx.lastVideoPrefs||{}); }catch{}
       }
       // auto-mirror based on current facing
       try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}

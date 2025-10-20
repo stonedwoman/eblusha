@@ -145,6 +145,10 @@ export async function connectLiveKit(token){
       attachVideoToTile(pub.track, p.identity, true);
       markHasVideo(p.identity, true);
       applyLayout();
+      try{
+        // Убедимся, что публикация действительно в unmute после повторного включения
+        (async()=>{ try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{} })();
+      }catch{}
     }
     refreshControls();
   });
