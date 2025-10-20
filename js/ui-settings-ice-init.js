@@ -141,6 +141,12 @@ export async function applySettingsFromModal(closeAfter){
       if (isMobile){ try{ oldV?.stop?.(); }catch{} }
       const newCam = await createLocalVideoTrack(constraints);
       try{ if (newCam?.mediaStreamTrack) newCam.mediaStreamTrack.contentHint = 'motion'; }catch{}
+      try{ await (async()=>{
+        const { desiredAspectRatio } = await import('./media.js');
+        // на случай отличия ориентации — добьёмся нужного AR
+        const ar = desiredAspectRatio();
+        try{ await newCam.mediaStreamTrack.applyConstraints({ aspectRatio: { ideal: ar } }); }catch{}
+      })(); }catch{}
       await cp.replaceTrack(newCam);
       await (cp.setMuted?.(false) || cp.unmute?.());
       if (!isMobile){ try{ oldV?.stop?.(); }catch{} }

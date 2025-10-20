@@ -164,6 +164,43 @@ export function desiredAspectRatio(){
   }catch{ return (16/9); }
 }
 
+function computeSizeForOrientation(prefs={}){
+  const ar = desiredAspectRatio();
+  // Используем сохранённые размеры, если они соответствуют ориентации; иначе 720p
+  let w = prefs.width|0, h = prefs.height|0;
+  const portrait = ar < 1;
+  const looksPortrait = (w>0 && h>0) ? (h>w) : portrait;
+  if (!(w>0 && h>0) || looksPortrait!==portrait){
+    if (portrait){ w = 720; h = 1280; }
+    else { w = 1280; h = 720; }
+  }
+  return { width: w, height: h, aspect: ar };
+}
+
+async function tuneTrackToOrientation(track, prefs={}){
+  try{
+    const mst = track?.mediaStreamTrack;
+    if (!mst || typeof mst.applyConstraints !== 'function') return;
+    const sz = computeSizeForOrientation(prefs);
+    // Сначала пробуем exact, затем ослабим до ideal
+    try{
+      await mst.applyConstraints({
+        aspectRatio: { exact: sz.aspect },
+        width:  { exact: sz.width },
+        height: { exact: sz.height },
+      });
+    }catch{
+      try{
+        await mst.applyConstraints({
+          aspectRatio: { ideal: sz.aspect },
+          width:  { ideal: sz.width },
+          height: { ideal: sz.height },
+        });
+      }catch{}
+    }
+  }catch{}
+}
+
 async function countVideoInputs(){
   try{
     const devs = await navigator.mediaDevices.enumerateDevices();
@@ -237,6 +274,7 @@ export async function ensureCameraOn(force=false){
   try{
     const newTrack = await createLocalVideoTrack(constraints);
     try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
+    try{ await tuneTrackToOrientation(newTrack, ctx.lastVideoPrefs||{}); }catch{}
     // Если за время ожидания стартанул другой create — закрываем этот трек и выходим
     if (myNonce !== camCreateNonce){ try{ newTrack.stop?.(); }catch{}; return; }
     const pub = camPub();
@@ -428,6 +466,8 @@ export async function toggleFacing(){
         ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
         ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
       });
+      // После restart подкорректируем MST точными констрейнтами под ориентацию
+      try{ await tuneTrackToOrientation(ctx.localVideoTrack, prefs||{}); }catch{}
       // гарантируем, что паблиш не остался в mute
       try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
       state.settings.camFacing = nextFacing;
@@ -469,6 +509,8 @@ export async function toggleFacing(){
       const shouldPreStop = isMobileUA();
       if (shouldPreStop){ try { ctx.localVideoTrack?.stop?.(); } catch {} }
       const newTrack = await createLocalVideoTrack(constraints);
+      try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
+      try{ await tuneTrackToOrientation(newTrack, prefs||{}); }catch{}
       try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
       const meId = ctx.room.localParticipant.identity;
       const pub = camPub();
