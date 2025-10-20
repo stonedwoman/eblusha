@@ -101,20 +101,6 @@ export async function connectLiveKit(token){
     cleanupOrphanDom();
   });
 
-  // На некоторых платформах, когда вкладка была в фоне, события могли пройти мимо DOM.
-  // При публикации удалённых видео треков в фоне — догарантируем подписку.
-  try{
-    if (RoomEvent && RoomEvent.TrackPublished != null){
-      ctx.room.on(RoomEvent.TrackPublished, (pub, participant)=>{
-        try{
-          if ((pub?.kind === 'video' || pub?.track?.kind === 'video') && typeof pub?.setSubscribed === 'function' && !pub.isSubscribed){
-            pub.setSubscribed(true);
-          }
-        }catch{}
-      });
-    }
-  }catch{}
-
   ctx.room.on(RoomEvent.TrackMuted,  (pub,p)=>{
     if(pub?.source===Track.Source.Microphone){ refreshControls(); }
     if(pub?.source===Track.Source.Camera){
@@ -239,15 +225,6 @@ export async function connectLiveKit(token){
     };
 
     hydrateWithRetry(12);
-    // При возврате вкладки в фокус — повторно гидрируем, на случай упущенных DOM-операций
-    const onVisible = ()=>{
-      if (document.visibilityState !== 'visible') return;
-      try{ hydrateWithRetry(10); }catch{}
-      try{ applyLayout(); }catch{}
-      try{ dedupeTilesByPid(); }catch{}
-      try{ cleanupOrphanDom(); }catch{}
-    };
-    document.addEventListener('visibilitychange', onVisible);
   } catch {}
 
   await ensureMicOn();
