@@ -150,7 +150,7 @@ export async function connectLiveKit(token){
     }
   });
 
-  ctx.room.on(RoomEvent.LocalTrackPublished,   (pub,p)=>{
+  ctx.room.on(RoomEvent.LocalTrackPublished,   async (pub,p)=>{
     if(pub?.source===Track.Source.Camera && p?.isLocal && pub.track){
       ctx.localVideoTrack = pub.track;
       attachVideoToTile(pub.track, p.identity, true);
