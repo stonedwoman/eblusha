@@ -152,11 +152,9 @@ function installLocalVideoTrackGuards(track){
         if (ctx.camDesiredOn === false) return; // пользователь явно выключил камеру
         const cur = (camPub()?.track || ctx.localVideoTrack)?.mediaStreamTrack;
         if (cur && cur !== mst) return;
-        const now = Date.now();
-        if (typeof ctx._lastCamRecoverTs === 'number' && (now - ctx._lastCamRecoverTs) < 1500) return;
-        ctx._lastCamRecoverTs = now;
-        // мягкая попытка восстановить с тем же facing
-        await ensureCameraOn(true);
+        // Не автозапускаем новую камеру — дадим пользователю включить вручную
+        // и просто дернём обновление UI
+        window.dispatchEvent(new Event('app:refresh-ui'));
       }catch{}
     };
     mst.addEventListener('ended', onEnded);
@@ -272,6 +270,8 @@ export async function pickCameraDevice(facing){
 export async function ensureCameraOn(force=false){
   if (!ctx.room) return;
   if (camBusy && !force) return; // защита от повторного входа/зацикливания
+  // Если пользователь не просил включать камеру — не делаем автозапуск
+  if (ctx.camDesiredOn === false && !force) return;
   camBusy = true;
   const myNonce = ++camCreateNonce;
   const lp = ctx.room?.localParticipant;

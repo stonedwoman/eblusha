@@ -200,6 +200,8 @@ export async function connectLiveKit(token){
   });
 
   await ctx.room.connect(LIVEKIT_WS_URL, token);
+  // После переподключения не автозапускаем камеру: ждём явного действия пользователя
+  try{ ctx.camDesiredOn = isFinite(ctx.camDesiredOn) ? ctx.camDesiredOn : undefined; }catch{}
   wireData(); // чат datachannel
 
   registerParticipant(ctx.room.localParticipant);
