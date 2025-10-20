@@ -142,86 +142,17 @@ function installLocalVideoTrackGuards(track){
   try{
     const mst = track?.mediaStreamTrack;
     if (!mst) return;
-    // Если камера пропала/доступ потерян — пробуем восстановить текущими настройками,
-    // но только если это актуальный MST и мы не в процессе переключения
+    // Если камера пропала/доступ потерян — пробуем восстановить текущими настройками
     const onEnded = async ()=>{
       try{
         if (!ctx.room) return;
-        if (ctx._camSwitching) return;
-        if (document.visibilityState === 'hidden') return;
-        if (ctx.camDesiredOn === false) return; // пользователь явно выключил камеру
-        const cur = (camPub()?.track || ctx.localVideoTrack)?.mediaStreamTrack;
-        if (cur && cur !== mst) return;
-        // Не автозапускаем новую камеру — дадим пользователю включить вручную
-        // и просто дернём обновление UI
-        window.dispatchEvent(new Event('app:refresh-ui'));
+        // мягкая попытка восстановить с тем же facing
+        await ensureCameraOn(true);
       }catch{}
     };
     mst.addEventListener('ended', onEnded);
     mst.addEventListener('mute',  ()=>{/* ignore; LK pub.mute обработается отдельно */});
   }catch{}
-}
-
-export function desiredAspectRatio(){
-  try{
-    const v = getLocalTileVideo();
-    const isPortrait = v ? (v.videoHeight > v.videoWidth)
-      : (window.matchMedia?.('(orientation: portrait)')?.matches || (window.innerHeight > window.innerWidth));
-    return isPortrait ? (9/16) : (16/9);
-  }catch{ return (16/9); }
-}
-
-function computeSizeForOrientation(prefs={}){
-  const ar = desiredAspectRatio();
-  // Используем сохранённые размеры, если они соответствуют ориентации; иначе 720p
-  let w = prefs.width|0, h = prefs.height|0;
-  const portrait = ar < 1;
-  const looksPortrait = (w>0 && h>0) ? (h>w) : portrait;
-  if (!(w>0 && h>0) || looksPortrait!==portrait){
-    if (portrait){ w = 720; h = 1280; }
-    else { w = 1280; h = 720; }
-  }
-  return { width: w, height: h, aspect: ar };
-}
-
-async function tuneTrackToOrientation(track, prefs={}){
-  try{
-    const mst = track?.mediaStreamTrack;
-    if (!mst || typeof mst.applyConstraints !== 'function') return;
-    const sz = computeSizeForOrientation(prefs);
-    // Сначала пробуем exact, затем ослабим до ideal
-    try{
-      await mst.applyConstraints({
-        aspectRatio: { exact: sz.aspect },
-        width:  { exact: sz.width },
-        height: { exact: sz.height },
-      });
-    }catch{
-      try{
-        await mst.applyConstraints({
-          aspectRatio: { ideal: sz.aspect },
-          width:  { ideal: sz.width },
-          height: { ideal: sz.height },
-        });
-      }catch{}
-    }
-  }catch{}
-}
-
-function buildVideoDefaults(){
-  try{
-    const devId = state.settings.camDevice || undefined;
-    const prefs = ctx.lastVideoPrefs || {};
-    const sz = computeSizeForOrientation(prefs);
-    const out = {
-      ...(devId ? { deviceId: { exact: devId } } : {}),
-      aspectRatio: { ideal: sz.aspect },
-      frameRate: { ideal: 30, min: 15 },
-      width:  { ideal: sz.width },
-      height: { ideal: sz.height },
-    };
-    return out;
-  }catch{ return {}; }
 }
 
 async function countVideoInputs(){
@@ -244,13 +175,14 @@ function captureCurrentVideoPrefs(){
     const lkTrack = pub?.track || ctx.localVideoTrack;
     const mst = lkTrack?.mediaStreamTrack;
     const s = mst?.getSettings?.() || {};
-  const v0 = getLocalTileVideo();
-  const w0 = (s.width|0) || (v0?.videoWidth|0) || 0;
-  const h0 = (s.height|0) || (v0?.videoHeight|0) || 0;
-  const prefs = { width: w0||undefined, height: h0||undefined };
+    const v0 = getLocalTileVideo();
+    const w0 = (s.width|0) || (v0?.videoWidth|0) || 0;
+    const h0 = (s.height|0) || (v0?.videoHeight|0) || 0;
+    const ar0 = (w0>0 && h0>0) ? (w0/h0) : (v0 && v0.videoWidth>0 && v0.videoHeight>0 ? (v0.videoWidth/v0.videoHeight) : undefined);
+    const prefs = { width: w0||undefined, height: h0||undefined, aspectRatio: ar0||undefined };
     try{ ctx.lastVideoPrefs = prefs; }catch{}
     return prefs;
-  }catch{ return { width: undefined, height: undefined }; }
+  }catch{ return { width: undefined, height: undefined, aspectRatio: undefined }; }
 }
 
 export async function pickCameraDevice(facing){
@@ -268,14 +200,8 @@ export async function pickCameraDevice(facing){
 
 export async function ensureCameraOn(force=false){
   if (!ctx.room) return;
-  if (camBusy && !force) return; // предотвращаем параллельные включения, но force разрешает
-  // Если пользователь не просил включать камеру — не делаем автозапуск
-  if (ctx.camDesiredOn === false && !force) return;
+  if (camBusy && !force) return; // защита от повторного входа/зацикливания
   camBusy = true;
-  // на входе очищаем потенциальные зависшие превью/локальные ресурсы (кроме опубликованного)
-  try{
-    if (ctx.previewTrack){ try{ ctx.previewTrack.stop?.(); }catch{}; try{ ctx.previewTrack.detach?.()?.remove?.(); }catch{}; ctx.previewTrack = null; }
-  }catch{}
   const myNonce = ++camCreateNonce;
   const lp = ctx.room?.localParticipant;
   const devId = state.settings.camDevice || await pickCameraDevice(state.settings.camFacing||"user");
@@ -284,29 +210,28 @@ export async function ensureCameraOn(force=false){
   const base = devId
     ? { deviceId: { exact: devId } }
     : { facingMode: { ideal: state.settings.camFacing||"user" } };
+  const last = (ctx.lastVideoPrefs||{});
+  const arIdeal = (typeof last.aspectRatio === "number" && last.aspectRatio>0)
+    ? last.aspectRatio
+    : (16/9); // дефолтно просим 16:9, чтобы избежать 4:3
   const constraints = {
     ...base,
-    frameRate: { ideal: 30, min: 15 }
+    aspectRatio: { ideal: arIdeal },
+    ...(last.width  ? { width:  { ideal: last.width  } } : {}),
+    ...(last.height ? { height: { ideal: last.height } } : {}),
   };
   const old = ctx.localVideoTrack || camPub()?.track || null;
   // На мобильных (особенно Android) перед открытием новой камеры освобождаем ресурс старого трека
   const shouldPreStop = isMobileUA();
   if (shouldPreStop && old){ try{ old.stop?.(); }catch{} }
   try{
-    // Ограничим время createLocalVideoTrack, чтобы не зависнуть при подвисшей камере
-    const createWithTimeout = (ms)=> Promise.race([
-      createLocalVideoTrack(constraints),
-      new Promise((_,rej)=> setTimeout(()=> rej(new Error('camera-create-timeout')), ms))
-    ]);
-    const newTrack = await createWithTimeout(8500);
-    try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
+    const newTrack = await createLocalVideoTrack(constraints);
     // Если за время ожидания стартанул другой create — закрываем этот трек и выходим
     if (myNonce !== camCreateNonce){ try{ newTrack.stop?.(); }catch{}; return; }
     const pub = camPub();
     if (pub){
-      try{ await pub.replaceTrack(newTrack); }
-      catch(e){ try{ await ctx.room.localParticipant.unpublishTrack(pub.track); }catch{}; await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera }); }
-      try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{}
+      await pub.replaceTrack(newTrack);
+      await (pub.setMuted?.(false) || pub.unmute?.());
     } else {
       await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
     }
@@ -337,7 +262,6 @@ export async function ensureCameraOn(force=false){
     const ticks = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
     ticks.forEach(ms=> setTimeout(arTick, ms));
   }catch(e){
-    console.error('[camera] ensureCameraOn failed:', e);
     alert("Не удалось включить камеру: "+(e?.message||e));
   } finally {
     camBusy = false;
@@ -400,37 +324,51 @@ export async function toggleCam(){
   try{
     const lp = ctx.room.localParticipant;
     const targetOn = !isCamActuallyOn();
-    // сохраняем желаемое состояние камеры, чтобы onEnded-автовосстановление не мешало
-    try{ ctx.camDesiredOn = targetOn; }catch{}
     let pub = camPub();
     if (targetOn){
-      // Включение: используем единый путь через ensureCameraOn
-      await ensureCameraOn(true);
+      // Включение
+      if (!pub){
+        try{
+          if (typeof lp?.setCameraEnabled === "function"){
+            await lp.setCameraEnabled(true, { videoCaptureDefaults:{ deviceId: (state.settings.camDevice||undefined) } });
+          } else {
+            await ensureCameraOn(true);
+          }
+        }catch{}
+        pub = camPub();
+      } else {
+        if (typeof lp?.setCameraEnabled === "function"){ try{ await lp.setCameraEnabled(true); }catch{} }
+        if (typeof pub.unmute === "function")      await pub.unmute();
+        else if (typeof pub.setMuted === "function") await pub.setMuted(false);
+        else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
+      }
       // auto-mirror based on current facing
       try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
     } else {
       // Выключение
-      // Сбросим любые незавершённые открытия/переключения камеры
-      try{ camCreateNonce++; ctx._camSwitching = false; ctx.camDesiredOn = false; }catch{}
       let turnedOff = false;
+      try{
+        if (typeof lp?.setCameraEnabled === "function"){ await lp.setCameraEnabled(false); turnedOff = true; }
+      }catch{}
       // Если LP-API не сработал — жёстко отписываем трек
       pub = camPub();
-      if (pub){
-        try{
-          const track = pub.track;
-          if (track){
-            try{ await ctx.room?.localParticipant?.unpublishTrack(track); }catch{}
-            try{ track.stop?.(); }catch{}
-          }
-        }catch{}
-        try{
-          if (typeof pub.mute === "function")         await pub.mute();
-          else if (typeof pub.setMuted === "function") await pub.setMuted(true);
-          else if (pub.track?.setEnabled)              pub.track.setEnabled(false);
-        }catch{}
+      if (!turnedOff){
+        if (pub){
+          try{
+            const track = pub.track;
+            if (track){
+              try{ await ctx.room?.localParticipant?.unpublishTrack(track); }catch{}
+              try{ track.stop?.(); }catch{}
+            }
+          }catch{}
+          try{
+            if (typeof pub.mute === "function")         await pub.mute();
+            else if (typeof pub.setMuted === "function") await pub.setMuted(true);
+            else if (pub.track?.setEnabled)              pub.track.setEnabled(false);
+          }catch{}
+        }
       }
       try{ ctx.localVideoTrack = null; }catch{}
-      try{ ctx.lastVideoPrefs = null; }catch{}
       showAvatarInTile(lp.identity);
     }
     applyLayout();
@@ -450,7 +388,6 @@ export async function toggleFacing(){
   // не ограничиваемся числом камер: многие мобильные отдают 1 device, но поддерживают facingMode
   camBusy = true;
   ctx._camSwitching = true;
-  const myNonce = ++camCreateNonce; // защитимся от повторных кликов/гонок
   const btn = byId("btnFacing"); if (btn) btn.disabled = true;
 
   const prevFacing = state.settings.camFacing || "user";
@@ -459,6 +396,7 @@ export async function toggleFacing(){
   try{
     // Сохраняем текущие преференции (размер/AR), чтобы удержать 16:9 после переключения
     const prefs = captureCurrentVideoPrefs();
+    const arIdeal = (typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : (16/9);
 
     // 1) мягкий путь — restartTrack, если есть
     if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
@@ -471,8 +409,13 @@ export async function toggleFacing(){
           tile0.dataset.freezeAr = String(ar0);
         }
       }catch{}
-      // Минимально просим только смену facing без навязывания формата
-      await ctx.localVideoTrack.restartTrack({ facingMode: nextFacing });
+      // Просим сохранить 16:9 (или прежний AR), плюс текущие предпочтительные размеры
+      await ctx.localVideoTrack.restartTrack({
+        facingMode: nextFacing,
+        aspectRatio: { ideal: arIdeal },
+        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
+        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
+      });
       // гарантируем, что паблиш не остался в mute
       try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
       state.settings.camFacing = nextFacing;
@@ -502,49 +445,24 @@ export async function toggleFacing(){
       state.settings.camDevice = ""; // дать браузеру выбрать
 
       const picked = await pickCameraDevice(nextFacing);
-      // Базово выбираем устройство/фейсинг, добавляем AR на основе ориентации и предпочтительные размеры
-      let constraints = {
+      // Базово выбираем устройство/фейсинг, добавляем AR 16:9 и предпочтительные размеры
+      const constraints = {
         ...(picked ? { deviceId: { exact: picked } } : { facingMode: { ideal: nextFacing } }),
-        frameRate: { ideal: 30, min: 15 }
+        aspectRatio: { ideal: arIdeal },
+        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
+        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
       };
-      // Если предыдущий локальный трек существует, попробуем подсказать target frame size близкую к нему
-      try{
-        const prev = ctx.localVideoTrack?.mediaStreamTrack;
-        const s = prev?.getSettings?.()||{};
-        if ((s.width|0)>0 && (s.height|0)>0){
-          constraints = { ...constraints, width: { ideal: s.width }, height: { ideal: s.height } };
-        }
-      }catch{}
       // На мобильных сначала освободим текущую камеру, чтобы избежать ошибки доступа
-      const shouldPreStop = true; // всегда отпускаем устройство перед сменой тыла/фронта
-      if (shouldPreStop){
-        try {
-          const tr = ctx.localVideoTrack;
-          ctx.localVideoTrack = null;
-          await ctx.room?.localParticipant?.unpublishTrack(tr);
-          try{ tr?.stop?.(); }catch{}
-          // небольшая пауза, чтобы драйвер освободил устройство
-          await new Promise(res=> setTimeout(res, 200));
-        } catch {}
-      }
-      // Таймаут на создание трека, чтобы избежать зависания и повторов
-      const createWithTimeout = (ms)=> Promise.race([
-        createLocalVideoTrack(constraints),
-        new Promise((_,rej)=> setTimeout(()=> rej(new Error('camera-create-timeout')), ms))
-      ]);
-      const newTrack = await createWithTimeout(3500);
-      // если за это время начался другой свитч — закрываем трек и выходим
-      if (myNonce !== camCreateNonce){ try{ newTrack.stop?.(); }catch{}; throw new Error('cam-switch-superseded'); }
-      try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
-      try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
+      const shouldPreStop = isMobileUA();
+      if (shouldPreStop){ try { ctx.localVideoTrack?.stop?.(); } catch {} }
+      const newTrack = await createLocalVideoTrack(constraints);
       const meId = ctx.room.localParticipant.identity;
       const pub = camPub();
 
       attachVideoToTile(newTrack, meId, true);
 
       if (pub) {
-        try{ await pub.replaceTrack(newTrack); }
-        catch(e){ try{ await ctx.room.localParticipant.unpublishTrack(pub.track); }catch{}; await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera }); }
+        await pub.replaceTrack(newTrack);
         if (!shouldPreStop){ try { ctx.localVideoTrack?.stop(); } catch {} }
         try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{}
       } else {

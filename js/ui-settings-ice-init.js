@@ -4,7 +4,7 @@ import { fitSpotlightSize, applyLayout, updateMobileScrollbar } from "./layout.j
 import { applyCamTransformsToLive } from "./tiles.js";
 import { setShareButtonMode, refreshControls } from "./controls.js";
 import {
-  micPub, camPub, isCamActuallyOn, desiredAspectRatio,
+  micPub, camPub, isCamActuallyOn,
 } from "./media.js";
 import {
   createLocalAudioTrack,
@@ -126,22 +126,19 @@ export async function applySettingsFromModal(closeAfter){
     if (cp && isCamActuallyOn()){
       const devId = state.settings.camDevice || null;
       const prefs = (ctx.lastVideoPrefs||{});
+      const arIdeal = (typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : (16/9);
       const constraints = {
         ...(devId ? { deviceId:{ exact: devId } } : { facingMode: { ideal: state.settings.camFacing||"user" } }),
-        frameRate: { ideal: 30, min: 15 }
+        aspectRatio: { ideal: arIdeal },
+        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
+        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
       };
       const oldV = ctx.localVideoTrack || cp.track;
       // На мобильных устройство часто блокируется, если открыть новую камеру до остановки старой
       const ua = navigator.userAgent||navigator.vendor||"";
       const isMobile = /Android|iPhone|iPad|iPod|Mobile|Silk/i.test(ua);
       if (isMobile){ try{ oldV?.stop?.(); }catch{} }
-      const createWithTimeout = (ms)=> Promise.race([
-        createLocalVideoTrack(constraints),
-        new Promise((_,rej)=> setTimeout(()=> rej(new Error('camera-create-timeout')), ms))
-      ]);
-      const newCam = await createWithTimeout(8500);
-      try{ if (newCam?.mediaStreamTrack) newCam.mediaStreamTrack.contentHint = 'motion'; }catch{}
-      // больше не принуждаем aspectRatio — используем нативный формат
+      const newCam = await createLocalVideoTrack(constraints);
       await cp.replaceTrack(newCam);
       await (cp.setMuted?.(false) || cp.unmute?.());
       if (!isMobile){ try{ oldV?.stop?.(); }catch{} }

@@ -61,17 +61,6 @@ export async function connectLiveKit(token){
         pub.source===Track.Source.ScreenShare ? 'Экран' : undefined);
       markHasVideo(participant.identity, true);
 
-      // Зафиксируем «общее» соотношение сторон по первому реальному удалённому видео
-      try{
-        if (!participant.isLocal && !ctx.sharedVideoFormat){
-          const mst = track.mediaStreamTrack;
-          const s = mst?.getSettings?.() || {};
-          const w = (s.width|0) || track?.attachedElements?.[0]?.videoWidth|0;
-          const h = (s.height|0)|| track?.attachedElements?.[0]?.videoHeight|0;
-          if (w>0 && h>0){ ctx.sharedVideoFormat = { width:w, height:h, aspect: w/h }; }
-        }
-      }catch{}
-
       const media = track.mediaStreamTrack;
       if (media){
         media.addEventListener('ended', ()=>{
@@ -123,15 +112,6 @@ export async function connectLiveKit(token){
           }
         }catch{}
       });
-
-  // Если публикуется локальная камера и статус mute у публикации отличается от трека — синхронизируем
-  ctx.room.on(RoomEvent.LocalTrackPublished,   async (pub,p)=>{
-    if(pub?.source===Track.Source.Camera && p?.isLocal && pub.track){
-      try{
-        if (pub.isMuted && pub.track?.isEnabled !== false){ await pub.unmute?.(); }
-      }catch{}
-    }
-  });
     }
   }catch{}
 
@@ -159,17 +139,12 @@ export async function connectLiveKit(token){
     }
   });
 
-  ctx.room.on(RoomEvent.LocalTrackPublished,   async (pub,p)=>{
+  ctx.room.on(RoomEvent.LocalTrackPublished,   (pub,p)=>{
     if(pub?.source===Track.Source.Camera && p?.isLocal && pub.track){
       ctx.localVideoTrack = pub.track;
       attachVideoToTile(pub.track, p.identity, true);
       markHasVideo(p.identity, true);
       applyLayout();
-      try{
-        // Убедимся, что публикация действительно в unmute после повторного включения
-        (async()=>{ try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{} })();
-      }catch{}
-      // Не навязываем aspectRatio — используем исходный формат камеры
     }
     refreshControls();
   });
@@ -179,7 +154,6 @@ export async function connectLiveKit(token){
       showAvatarInTile(p.identity);
       markHasVideo(p.identity, false);
       ctx.localVideoTrack = null;
-      try{ ctx.sharedVideoFormat = null; }catch{}
       applyLayout();
     }
     refreshControls();
@@ -205,8 +179,6 @@ export async function connectLiveKit(token){
   });
 
   await ctx.room.connect(LIVEKIT_WS_URL, token);
-  // После переподключения не автозапускаем камеру: ждём явного действия пользователя
-  try{ ctx.camDesiredOn = isFinite(ctx.camDesiredOn) ? ctx.camDesiredOn : undefined; }catch{}
   wireData(); // чат datachannel
 
   registerParticipant(ctx.room.localParticipant);
