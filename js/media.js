@@ -149,6 +149,7 @@ function installLocalVideoTrackGuards(track){
         if (!ctx.room) return;
         if (ctx._camSwitching) return;
         if (document.visibilityState === 'hidden') return;
+        if (ctx.camDesiredOn === false) return; // пользователь явно выключил камеру
         const cur = (camPub()?.track || ctx.localVideoTrack)?.mediaStreamTrack;
         if (cur && cur !== mst) return;
         const now = Date.now();
@@ -412,6 +413,8 @@ export async function toggleCam(){
   try{
     const lp = ctx.room.localParticipant;
     const targetOn = !isCamActuallyOn();
+    // сохраняем желаемое состояние камеры, чтобы onEnded-автовосстановление не мешало
+    try{ ctx.camDesiredOn = targetOn; }catch{}
     let pub = camPub();
     if (targetOn){
       // Включение
@@ -424,6 +427,8 @@ export async function toggleCam(){
           }
         }catch{}
         pub = camPub();
+        // Если публикация не появилась — форсировано создаём и публикуем трек
+        if (!pub){ await ensureCameraOn(true); pub = camPub(); }
       } else {
         if (typeof lp?.setCameraEnabled === "function"){ try{ await lp.setCameraEnabled(true); }catch{} }
         if (typeof pub.unmute === "function")      await pub.unmute();
