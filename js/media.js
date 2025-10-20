@@ -268,7 +268,7 @@ export async function pickCameraDevice(facing){
 
 export async function ensureCameraOn(force=false){
   if (!ctx.room) return;
-  if (camBusy) return; // всегда предотвращаем параллельные включения
+  if (camBusy && !force) return; // предотвращаем параллельные включения, но force разрешает
   // Если пользователь не просил включать камеру — не делаем автозапуск
   if (ctx.camDesiredOn === false && !force) return;
   camBusy = true;
