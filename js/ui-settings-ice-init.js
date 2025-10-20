@@ -143,7 +143,7 @@ export async function applySettingsFromModal(closeAfter){
         createLocalVideoTrack(constraints),
         new Promise((_,rej)=> setTimeout(()=> rej(new Error('camera-create-timeout')), ms))
       ]);
-      const newCam = await createWithTimeout(3500);
+      const newCam = await createWithTimeout(8500);
       try{ if (newCam?.mediaStreamTrack) newCam.mediaStreamTrack.contentHint = 'motion'; }catch{}
       try{ await (async()=>{
         const { desiredAspectRatio } = await import('./media.js');

@@ -295,7 +295,7 @@ export async function ensureCameraOn(force=false){
       createLocalVideoTrack(constraints),
       new Promise((_,rej)=> setTimeout(()=> rej(new Error('camera-create-timeout')), ms))
     ]);
-    const newTrack = await createWithTimeout(3500);
+    const newTrack = await createWithTimeout(8500);
     try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
     // Если за время ожидания стартанул другой create — закрываем этот трек и выходим
     if (myNonce !== camCreateNonce){ try{ newTrack.stop?.(); }catch{}; return; }
@@ -334,15 +334,6 @@ export async function ensureCameraOn(force=false){
     ticks.forEach(ms=> setTimeout(arTick, ms));
   }catch(e){
     console.error('[camera] ensureCameraOn failed:', e);
-    // если завис create — попробуем мягкий откат через restart/enable API
-    try{
-      const lp = ctx.room?.localParticipant;
-      if (typeof lp?.setCameraEnabled === 'function'){
-        await lp.setCameraEnabled(false);
-        await new Promise(res=> setTimeout(res, 120));
-        await lp.setCameraEnabled(true, { videoCaptureDefaults: buildVideoDefaults() });
-      }
-    }catch{}
     alert("Не удалось включить камеру: "+(e?.message||e));
   } finally {
     camBusy = false;
@@ -527,10 +518,18 @@ export async function toggleFacing(){
 
       const picked = await pickCameraDevice(nextFacing);
       // Базово выбираем устройство/фейсинг, добавляем AR на основе ориентации и предпочтительные размеры
-      const constraints = {
+      let constraints = {
         ...(picked ? { deviceId: { exact: picked } } : { facingMode: { ideal: nextFacing } }),
         frameRate: { ideal: 30, min: 15 }
       };
+      // Если предыдущий локальный трек существует, попробуем подсказать target frame size близкую к нему
+      try{
+        const prev = ctx.localVideoTrack?.mediaStreamTrack;
+        const s = prev?.getSettings?.()||{};
+        if ((s.width|0)>0 && (s.height|0)>0){
+          constraints = { ...constraints, width: { ideal: s.width }, height: { ideal: s.height } };
+        }
+      }catch{}
       // На мобильных сначала освободим текущую камеру, чтобы избежать ошибки доступа
       const shouldPreStop = isMobileUA();
       if (shouldPreStop){ try { ctx.localVideoTrack?.stop?.(); } catch {} }
