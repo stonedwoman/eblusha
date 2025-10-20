@@ -281,18 +281,9 @@ export async function ensureCameraOn(force=false){
   const base = devId
     ? { deviceId: { exact: devId } }
     : { facingMode: { ideal: state.settings.camFacing||"user" } };
-  const last = (ctx.lastVideoPrefs||{});
-  const shared = ctx.sharedVideoFormat;
-  const arIdeal = (typeof shared?.aspect === 'number' && shared.aspect>0)
-    ? shared.aspect
-    : ((typeof last.aspectRatio === "number" && last.aspectRatio>0)
-      ? last.aspectRatio : desiredAspectRatio());
   const constraints = {
     ...base,
-    aspectRatio: { ideal: arIdeal },
-    frameRate: { ideal: 30, min: 15 },
-    ...(last.width  ? { width:  { ideal: last.width  } } : {}),
-    ...(last.height ? { height: { ideal: last.height } } : {}),
+    frameRate: { ideal: 30, min: 15 }
   };
   const old = ctx.localVideoTrack || camPub()?.track || null;
   // На мобильных (особенно Android) перед открытием новой камеры освобождаем ресурс старого трека
@@ -306,7 +297,6 @@ export async function ensureCameraOn(force=false){
     ]);
     const newTrack = await createWithTimeout(3500);
     try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
-    try{ await tuneTrackToOrientation(newTrack, ctx.lastVideoPrefs||{}); }catch{}
     // Если за время ожидания стартанул другой create — закрываем этот трек и выходим
     if (myNonce !== camCreateNonce){ try{ newTrack.stop?.(); }catch{}; return; }
     const pub = camPub();
@@ -484,6 +474,7 @@ export async function toggleFacing(){
   // не ограничиваемся числом камер: многие мобильные отдают 1 device, но поддерживают facingMode
   camBusy = true;
   ctx._camSwitching = true;
+  const myNonce = ++camCreateNonce; // защитимся от повторных кликов/гонок
   const btn = byId("btnFacing"); if (btn) btn.disabled = true;
 
   const prevFacing = state.settings.camFacing || "user";
@@ -492,10 +483,6 @@ export async function toggleFacing(){
   try{
     // Сохраняем текущие преференции (размер/AR), чтобы удержать 16:9 после переключения
     const prefs = captureCurrentVideoPrefs();
-    const shared = ctx.sharedVideoFormat;
-    const arIdeal = (typeof shared?.aspect === 'number' && shared.aspect>0)
-      ? shared.aspect
-      : ((typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : desiredAspectRatio());
 
     // 1) мягкий путь — restartTrack, если есть
     if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
@@ -508,16 +495,8 @@ export async function toggleFacing(){
           tile0.dataset.freezeAr = String(ar0);
         }
       }catch{}
-      // Просим сохранить 16:9 (или прежний AR), плюс текущие предпочтительные размеры
-      await ctx.localVideoTrack.restartTrack({
-        facingMode: nextFacing,
-        aspectRatio: { ideal: arIdeal },
-        frameRate: { ideal: 30, min: 15 },
-        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
-      });
-      // После restart подкорректируем MST точными констрейнтами под ориентацию
-      try{ await tuneTrackToOrientation(ctx.localVideoTrack, prefs||{}); }catch{}
+      // Минимально просим только смену facing без навязывания формата
+      await ctx.localVideoTrack.restartTrack({ facingMode: nextFacing });
       // гарантируем, что паблиш не остался в mute
       try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
       state.settings.camFacing = nextFacing;
@@ -550,10 +529,7 @@ export async function toggleFacing(){
       // Базово выбираем устройство/фейсинг, добавляем AR на основе ориентации и предпочтительные размеры
       const constraints = {
         ...(picked ? { deviceId: { exact: picked } } : { facingMode: { ideal: nextFacing } }),
-        aspectRatio: { ideal: arIdeal },
-        frameRate: { ideal: 30, min: 15 },
-        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
+        frameRate: { ideal: 30, min: 15 }
       };
       // На мобильных сначала освободим текущую камеру, чтобы избежать ошибки доступа
       const shouldPreStop = isMobileUA();
@@ -564,8 +540,9 @@ export async function toggleFacing(){
         new Promise((_,rej)=> setTimeout(()=> rej(new Error('camera-create-timeout')), ms))
       ]);
       const newTrack = await createWithTimeout(3500);
+      // если за это время начался другой свитч — закрываем трек и выходим
+      if (myNonce !== camCreateNonce){ try{ newTrack.stop?.(); }catch{}; throw new Error('cam-switch-superseded'); }
       try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
-      try{ await tuneTrackToOrientation(newTrack, prefs||{}); }catch{}
       try{ if (newTrack?.mediaStreamTrack) newTrack.mediaStreamTrack.contentHint = 'motion'; }catch{}
       const meId = ctx.room.localParticipant.identity;
       const pub = camPub();
