@@ -244,14 +244,13 @@ function captureCurrentVideoPrefs(){
     const lkTrack = pub?.track || ctx.localVideoTrack;
     const mst = lkTrack?.mediaStreamTrack;
     const s = mst?.getSettings?.() || {};
-    const v0 = getLocalTileVideo();
-    const w0 = (s.width|0) || (v0?.videoWidth|0) || 0;
-    const h0 = (s.height|0) || (v0?.videoHeight|0) || 0;
-    const ar0 = (w0>0 && h0>0) ? (w0/h0) : (v0 && v0.videoWidth>0 && v0.videoHeight>0 ? (v0.videoWidth/v0.videoHeight) : undefined);
-    const prefs = { width: w0||undefined, height: h0||undefined, aspectRatio: ar0||undefined };
+  const v0 = getLocalTileVideo();
+  const w0 = (s.width|0) || (v0?.videoWidth|0) || 0;
+  const h0 = (s.height|0) || (v0?.videoHeight|0) || 0;
+  const prefs = { width: w0||undefined, height: h0||undefined };
     try{ ctx.lastVideoPrefs = prefs; }catch{}
     return prefs;
-  }catch{ return { width: undefined, height: undefined, aspectRatio: undefined }; }
+  }catch{ return { width: undefined, height: undefined }; }
 }
 
 export async function pickCameraDevice(facing){

@@ -126,13 +126,9 @@ export async function applySettingsFromModal(closeAfter){
     if (cp && isCamActuallyOn()){
       const devId = state.settings.camDevice || null;
       const prefs = (ctx.lastVideoPrefs||{});
-      const arIdeal = (typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : desiredAspectRatio();
       const constraints = {
         ...(devId ? { deviceId:{ exact: devId } } : { facingMode: { ideal: state.settings.camFacing||"user" } }),
-        aspectRatio: { ideal: arIdeal },
-        frameRate: { ideal: 30, min: 15 },
-        ...(prefs.width  ? { width:  { ideal: prefs.width  } } : {}),
-        ...(prefs.height ? { height: { ideal: prefs.height } } : {}),
+        frameRate: { ideal: 30, min: 15 }
       };
       const oldV = ctx.localVideoTrack || cp.track;
       // На мобильных устройство часто блокируется, если открыть новую камеру до остановки старой
@@ -145,12 +141,7 @@ export async function applySettingsFromModal(closeAfter){
       ]);
       const newCam = await createWithTimeout(8500);
       try{ if (newCam?.mediaStreamTrack) newCam.mediaStreamTrack.contentHint = 'motion'; }catch{}
-      try{ await (async()=>{
-        const { desiredAspectRatio } = await import('./media.js');
-        // на случай отличия ориентации — добьёмся нужного AR
-        const ar = desiredAspectRatio();
-        try{ await newCam.mediaStreamTrack.applyConstraints({ aspectRatio: { ideal: ar } }); }catch{}
-      })(); }catch{}
+      // больше не принуждаем aspectRatio — используем нативный формат
       await cp.replaceTrack(newCam);
       await (cp.setMuted?.(false) || cp.unmute?.());
       if (!isMobile){ try{ oldV?.stop?.(); }catch{} }

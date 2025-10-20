@@ -160,12 +160,7 @@ export async function connectLiveKit(token){
         // Убедимся, что публикация действительно в unmute после повторного включения
         (async()=>{ try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{} })();
       }catch{}
-      try{
-        // Если уже знаем «общий» формат — подстройка только AR, без навязывания портрет/альбом
-        const f = ctx.sharedVideoFormat;
-        const mst = pub.track?.mediaStreamTrack;
-        if (f && mst?.applyConstraints){ await mst.applyConstraints({ aspectRatio: { ideal: f.aspect } }); }
-      }catch{}
+      // Не навязываем aspectRatio — используем исходный формат камеры
     }
     refreshControls();
   });
