@@ -155,6 +155,15 @@ function installLocalVideoTrackGuards(track){
   }catch{}
 }
 
+export function desiredAspectRatio(){
+  try{
+    const v = getLocalTileVideo();
+    const isPortrait = v ? (v.videoHeight > v.videoWidth)
+      : (window.matchMedia?.('(orientation: portrait)')?.matches || (window.innerHeight > window.innerWidth));
+    return isPortrait ? (9/16) : (16/9);
+  }catch{ return (16/9); }
+}
+
 async function countVideoInputs(){
   try{
     const devs = await navigator.mediaDevices.enumerateDevices();
@@ -213,7 +222,7 @@ export async function ensureCameraOn(force=false){
   const last = (ctx.lastVideoPrefs||{});
   const arIdeal = (typeof last.aspectRatio === "number" && last.aspectRatio>0)
     ? last.aspectRatio
-    : (16/9); // дефолтно просим 16:9, чтобы избежать 4:3
+    : desiredAspectRatio();
   const constraints = {
     ...base,
     aspectRatio: { ideal: arIdeal },
@@ -398,7 +407,7 @@ export async function toggleFacing(){
   try{
     // Сохраняем текущие преференции (размер/AR), чтобы удержать 16:9 после переключения
     const prefs = captureCurrentVideoPrefs();
-    const arIdeal = (typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : (16/9);
+    const arIdeal = (typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : desiredAspectRatio();
 
     // 1) мягкий путь — restartTrack, если есть
     if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
@@ -448,7 +457,7 @@ export async function toggleFacing(){
       state.settings.camDevice = ""; // дать браузеру выбрать
 
       const picked = await pickCameraDevice(nextFacing);
-      // Базово выбираем устройство/фейсинг, добавляем AR 16:9 и предпочтительные размеры
+      // Базово выбираем устройство/фейсинг, добавляем AR на основе ориентации и предпочтительные размеры
       const constraints = {
         ...(picked ? { deviceId: { exact: picked } } : { facingMode: { ideal: nextFacing } }),
         aspectRatio: { ideal: arIdeal },

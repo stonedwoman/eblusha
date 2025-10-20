@@ -4,7 +4,7 @@ import { fitSpotlightSize, applyLayout, updateMobileScrollbar } from "./layout.j
 import { applyCamTransformsToLive } from "./tiles.js";
 import { setShareButtonMode, refreshControls } from "./controls.js";
 import {
-  micPub, camPub, isCamActuallyOn,
+  micPub, camPub, isCamActuallyOn, desiredAspectRatio,
 } from "./media.js";
 import {
   createLocalAudioTrack,
@@ -126,7 +126,7 @@ export async function applySettingsFromModal(closeAfter){
     if (cp && isCamActuallyOn()){
       const devId = state.settings.camDevice || null;
       const prefs = (ctx.lastVideoPrefs||{});
-      const arIdeal = (typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : (16/9);
+      const arIdeal = (typeof prefs.aspectRatio === 'number' && prefs.aspectRatio>0) ? prefs.aspectRatio : desiredAspectRatio();
       const constraints = {
         ...(devId ? { deviceId:{ exact: devId } } : { facingMode: { ideal: state.settings.camFacing||"user" } }),
         aspectRatio: { ideal: arIdeal },
