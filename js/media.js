@@ -404,25 +404,8 @@ export async function toggleCam(){
     try{ ctx.camDesiredOn = targetOn; }catch{}
     let pub = camPub();
     if (targetOn){
-      // Включение
-      if (!pub){
-        try{
-          if (typeof lp?.setCameraEnabled === "function"){
-            await lp.setCameraEnabled(true, { videoCaptureDefaults: buildVideoDefaults() });
-          } else {
-            await ensureCameraOn(true);
-          }
-        }catch{}
-        pub = camPub();
-        // Если публикация не появилась — форсировано создаём и публикуем трек
-        if (!pub){ await ensureCameraOn(true); pub = camPub(); }
-      } else {
-        if (typeof lp?.setCameraEnabled === "function"){ try{ await lp.setCameraEnabled(true); }catch{} }
-        if (typeof pub.unmute === "function")      await pub.unmute();
-        else if (typeof pub.setMuted === "function") await pub.setMuted(false);
-        else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
-        try{ await tuneTrackToOrientation(pub.track || ctx.localVideoTrack, ctx.lastVideoPrefs||{}); }catch{}
-      }
+      // Включение: используем единый путь через ensureCameraOn
+      await ensureCameraOn(true);
       // auto-mirror based on current facing
       try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
     } else {
@@ -430,26 +413,21 @@ export async function toggleCam(){
       // Сбросим любые незавершённые открытия/переключения камеры
       try{ camCreateNonce++; ctx._camSwitching = false; ctx.camDesiredOn = false; }catch{}
       let turnedOff = false;
-      try{
-        if (typeof lp?.setCameraEnabled === "function"){ await lp.setCameraEnabled(false); turnedOff = true; }
-      }catch{}
       // Если LP-API не сработал — жёстко отписываем трек
       pub = camPub();
-      if (!turnedOff){
-        if (pub){
-          try{
-            const track = pub.track;
-            if (track){
-              try{ await ctx.room?.localParticipant?.unpublishTrack(track); }catch{}
-              try{ track.stop?.(); }catch{}
-            }
-          }catch{}
-          try{
-            if (typeof pub.mute === "function")         await pub.mute();
-            else if (typeof pub.setMuted === "function") await pub.setMuted(true);
-            else if (pub.track?.setEnabled)              pub.track.setEnabled(false);
-          }catch{}
-        }
+      if (pub){
+        try{
+          const track = pub.track;
+          if (track){
+            try{ await ctx.room?.localParticipant?.unpublishTrack(track); }catch{}
+            try{ track.stop?.(); }catch{}
+          }
+        }catch{}
+        try{
+          if (typeof pub.mute === "function")         await pub.mute();
+          else if (typeof pub.setMuted === "function") await pub.setMuted(true);
+          else if (pub.track?.setEnabled)              pub.track.setEnabled(false);
+        }catch{}
       }
       try{ ctx.localVideoTrack = null; }catch{}
       try{ ctx.lastVideoPrefs = null; }catch{}
@@ -538,8 +516,17 @@ export async function toggleFacing(){
         }
       }catch{}
       // На мобильных сначала освободим текущую камеру, чтобы избежать ошибки доступа
-      const shouldPreStop = isMobileUA();
-      if (shouldPreStop){ try { ctx.localVideoTrack?.stop?.(); } catch {} }
+      const shouldPreStop = true; // всегда отпускаем устройство перед сменой тыла/фронта
+      if (shouldPreStop){
+        try {
+          const tr = ctx.localVideoTrack;
+          ctx.localVideoTrack = null;
+          await ctx.room?.localParticipant?.unpublishTrack(tr);
+          try{ tr?.stop?.(); }catch{}
+          // небольшая пауза, чтобы драйвер освободил устройство
+          await new Promise(res=> setTimeout(res, 200));
+        } catch {}
+      }
       // Таймаут на создание трека, чтобы избежать зависания и повторов
       const createWithTimeout = (ms)=> Promise.race([
         createLocalVideoTrack(constraints),
