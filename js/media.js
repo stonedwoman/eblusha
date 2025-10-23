@@ -506,7 +506,13 @@ async function onShareClick(){
       try { state.me._camWasOnBeforeShare = isCamActuallyOn(); } catch {}
       const tracks = await createLocalScreenTracks({ audio:true });
       ctx.screenTracks = tracks;
-      for(const t of tracks){ await ctx.room.localParticipant.publishTrack(t); }
+      for(const t of tracks){
+        try{ if (t?.mediaStreamTrack && 'contentHint' in t.mediaStreamTrack) t.mediaStreamTrack.contentHint = 'detail'; }catch{}
+        const opts = (t.kind === 'video')
+          ? { source: Track.Source.ScreenShare }
+          : { source: Track.Source.ScreenShareAudio };
+        await ctx.room.localParticipant.publishTrack(t, opts);
+      }
       state.me.share = true;
 
       const vTrack = tracks.find(t=>t.kind==="video");

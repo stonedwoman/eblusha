@@ -365,8 +365,11 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
   v.playsInline = true;
   v.setAttribute('autoplay','');
   v.setAttribute('playsinline','');
-  // скрываем видео до прихода корректных метаданных, чтобы не влиять на первый лэйаут
-  v.style.visibility = 'hidden';
+  // Временно не скрываем screen-share, чтобы LK не решил, что он «невиден» (adaptive stream)
+  if (!String(identity).endsWith('#screen')){
+    // скрываем обычные видео до прихода метаданных, чтобы не влиять на первый лэйаут
+    v.style.visibility = 'hidden';
+  }
   if (isLocal){
     v.muted = true;
     v.setAttribute('muted','');
@@ -386,6 +389,9 @@ export function attachVideoToTile(track, identity, isLocal, labelOverride){
     if ((v.videoWidth|0) > 0 && (v.videoHeight|0) > 0){
       v.style.visibility = '';
       try { layoutUniformGrid(); setTimeout(layoutUniformGrid, 30); } catch {}
+    } else if (String(identity).endsWith('#screen')){
+      // для screen-share пытаемся показать сразу, чтобы сохранить видимость для adaptive stream
+      v.style.visibility = '';
     }
   };
   v.addEventListener('loadedmetadata', tryApply);
