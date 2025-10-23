@@ -63,16 +63,20 @@ export async function connectLiveKit(token){
 
       const media = track.mediaStreamTrack;
       if (media){
-        media.addEventListener('ended', ()=>{
-          showAvatarInTile(id);
-          recomputeHasVideo(participant.identity);
-          applyLayout();
-        });
-        media.addEventListener('mute',  ()=>{
-          showAvatarInTile(id);
-          recomputeHasVideo(participant.identity);
-          applyLayout();
-        });
+        // Для screen-share не очищаем тайл на mute/ended — ждём TrackUnsubscribed
+        const isScreen = (pub.source===Track.Source.ScreenShare || pub.source===Track.Source.ScreenShareAudio);
+        if (!isScreen){
+          media.addEventListener('ended', ()=>{
+            showAvatarInTile(id);
+            recomputeHasVideo(participant.identity);
+            applyLayout();
+          });
+          media.addEventListener('mute',  ()=>{
+            showAvatarInTile(id);
+            recomputeHasVideo(participant.identity);
+            applyLayout();
+          });
+        }
         media.addEventListener('unmute', ()=>{
           // повторно прикрепляем к тайлу без смены трека
           attachVideoToTile(track, id, participant.isLocal,
@@ -90,10 +94,14 @@ export async function connectLiveKit(token){
     const id = participant.identity +
       (pub.source===Track.Source.ScreenShare || pub.source===Track.Source.ScreenShareAudio ? '#screen' : '');
     if(track.kind==='video'){
-      showAvatarInTile(id);
-      recomputeHasVideo(participant.identity);
-      // если это был screen-share — удалим тайл целиком
-      if (/#screen$/.test(id)) removeTileByPid(id);
+      const isScreen = /#screen$/.test(id);
+      if (isScreen){
+        // для screen оставим тайл (пустой), удалять будем только по локальному анпаблишу/leave
+        showAvatarInTile(id);
+      } else {
+        showAvatarInTile(id);
+        recomputeHasVideo(participant.identity);
+      }
     }
     (track.detach?.()||[]).forEach(el=>el.remove());
     applyLayout();
@@ -255,11 +263,10 @@ export async function connectLiveKit(token){
           enumerateVideoPubs(p).forEach(pub=>{
             const isScreen = (pub?.source===Track.Source.ScreenShare || pub?.source===Track.Source.ScreenShareAudio);
             const id = p.identity + (isScreen ? '#screen' : '');
+            // считаем публикацию «ожидаемой» даже если track временно отсутствует
+            if (isScreen) expectedScreen.add(id); else expectedVideo.add(p.identity);
             const track = pub?.track;
-            if (track){
-              if (isScreen) expectedScreen.add(id); else expectedVideo.add(p.identity);
-              attachVideoToTile(track, id, !!p.isLocal, (isScreen ? 'Экран' : undefined));
-            }
+            if (track) attachVideoToTile(track, id, !!p.isLocal, (isScreen ? 'Экран' : undefined));
           });
         };
         proc(ctx.room.localParticipant);

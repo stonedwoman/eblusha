@@ -1067,14 +1067,12 @@ export function cleanupOrphanDom(){
     const allowed = new Set();
     ctx.registry.forEach((_r, id)=> allowed.add(id));
 
-    // .tile: base pid должен быть в реестре; screen (#screen) без видео удаляем
+    // .tile: base pid должен быть в реестре; screen оставляем даже без видео
     document.querySelectorAll('.tile').forEach(t=>{
       const pid = t.getAttribute('data-pid'); if (!pid) return;
       const base = pid.replace(/#screen$/,'');
       const has = allowed.has(base);
-      const isScreen = /#screen$/.test(pid);
-      const hasVid = !!t.querySelector('video');
-      if (!has || (isScreen && !hasVid)){
+      if (!has){
         const v=t.querySelector('video'); if (v) safeRemoveVideo(v);
         try{ t.remove(); }catch{}
       }

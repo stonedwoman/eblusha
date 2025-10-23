@@ -474,8 +474,8 @@ export async function stopScreenShare(){
   try{
     const localId = ctx.room?.localParticipant?.identity;
     if (localId){
-      // удаляем плитку «Экран» полностью
-      removeTileByPid(localId+"#screen");
+      // локально очищаем содержимое, но сам тайл может оставаться у других — удаление не форсим
+      showAvatarInTile(localId+"#screen");
     }
   }catch{}
   // подчистим DOM и разложим заново
