@@ -244,6 +244,39 @@ export async function connectLiveKit(token){
     };
     const onVis = ()=>{ if (document.visibilityState === 'visible') rehydrateNow(); };
     try{ document.addEventListener('visibilitychange', onVis); }catch{}
+
+    // Периодический «жёсткий» reconcile каждые 5 секунд
+    try{ clearInterval(ctx._reconcileTimer); }catch{}
+    const reconcile = ()=>{
+      try{
+        const expectedScreen = new Set();
+        const expectedVideo  = new Set();
+        const proc = (p)=>{
+          enumerateVideoPubs(p).forEach(pub=>{
+            const isScreen = (pub?.source===Track.Source.ScreenShare || pub?.source===Track.Source.ScreenShareAudio);
+            const id = p.identity + (isScreen ? '#screen' : '');
+            const track = pub?.track;
+            if (track){
+              if (isScreen) expectedScreen.add(id); else expectedVideo.add(p.identity);
+              attachVideoToTile(track, id, !!p.isLocal, (isScreen ? 'Экран' : undefined));
+            }
+          });
+        };
+        proc(ctx.room.localParticipant);
+        getRemoteParticipants().forEach(proc);
+        // удаляем «экран»-тайлы, если нет активного screen-share
+        document.querySelectorAll('.tile[data-pid$="#screen"]').forEach(el=>{
+          const pid = el.getAttribute('data-pid')||'';
+          if (!expectedScreen.has(pid)) removeTileByPid(pid);
+        });
+        // обновим флаги наличия видео у базовых участников
+        try{ document.querySelectorAll('.tile').forEach(t=>{ const id=t.getAttribute('data-pid')||''; const base=id.replace('#screen',''); recomputeHasVideo(base); }); }catch{}
+      }catch{}
+      try{ dedupeTilesByPid(); cleanupOrphanDom(); applyLayout(); }catch{}
+    };
+    ctx._reconcileTimer = setInterval(reconcile, 5000);
+    // и один немедленный прогон
+    setTimeout(reconcile, 200);
   } catch {}
 
   await ensureMicOn();

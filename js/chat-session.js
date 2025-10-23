@@ -58,6 +58,9 @@ export async function leaveRoom(){
     if(ctx.room){ await ctx.room.disconnect(); }
   }catch{}
 
+  // остановим reconcile-таймер, если есть
+  try{ if (ctx._reconcileTimer){ clearInterval(ctx._reconcileTimer); ctx._reconcileTimer = null; } }catch{}
+
   ctx.registry.clear();
   byId("onlineList").innerHTML="";
   byId("tilesMain").innerHTML="";
