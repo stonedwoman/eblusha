@@ -888,6 +888,17 @@ function clearGrid(){
 /* --- реагируем на изменения окружения --- */
 window.addEventListener('resize', ()=>{ requestLayout(); }, { passive:true });
 window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ requestLayout(); }, 60); }, { passive:true });
+// При возврате во вкладку — переустановим наблюдателей и перерисуем сетку
+try{
+  window.addEventListener('visibilitychange', ()=>{
+    if (document.visibilityState === 'visible'){
+      try{ installVideoARWatchers(); }catch{}
+      requestLayout();
+      setTimeout(requestLayout, 60);
+      setTimeout(requestLayout, 160);
+    }
+  });
+}catch{}
 
 /* ResizeObserver — следим и за .tiles-main, и за #tiles */
 let roMain = null;

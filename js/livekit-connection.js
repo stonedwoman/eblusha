@@ -142,6 +142,14 @@ export async function connectLiveKit(token){
       ctx.localVideoTrack = null;
       applyLayout();
     }
+    // локальный анпаблиш скриншота — удаляем плитку «Экран»
+    if ((pub?.source===Track.Source.ScreenShare || pub?.source===Track.Source.ScreenShareAudio) && p?.isLocal){
+      try{ removeTileByPid(`${p.identity}#screen`); }catch{}
+      try{ state.me.share = false; }catch{}
+      applyLayout();
+      dedupeTilesByPid();
+      cleanupOrphanDom();
+    }
     refreshControls();
   });
 
@@ -225,6 +233,17 @@ export async function connectLiveKit(token){
     };
 
     hydrateWithRetry(12);
+
+    // Ре-гидратация при возвращении на вкладку
+    const rehydrateNow = ()=>{
+      try{
+        attachFromPubs(ctx.room.localParticipant);
+        getRemoteParticipants().forEach(attachFromPubs);
+      }catch{}
+      try{ applyLayout(); dedupeTilesByPid(); cleanupOrphanDom(); }catch{}
+    };
+    const onVis = ()=>{ if (document.visibilityState === 'visible') rehydrateNow(); };
+    try{ document.addEventListener('visibilitychange', onVis); }catch{}
   } catch {}
 
   await ensureMicOn();

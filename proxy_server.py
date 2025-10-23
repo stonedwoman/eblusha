@@ -6,6 +6,7 @@
 
 import http.server
 import socketserver
+import os
 import urllib.request
 import urllib.parse
 import json
@@ -62,6 +63,10 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
 
 def run_proxy_server(port=8080):
     """Запуск прокси-сервера"""
+    # Гарантируем, что корень статики — папка рядом с этим файлом
+    web_root = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(web_root)
+
     with socketserver.TCPServer(("", port), CORSProxyHandler) as httpd:
         print(f"🚀 Прокси-сервер запущен на http://localhost:{port}")
         print(f"📡 Проксирует /token запросы на https://voice.eblusha.org")

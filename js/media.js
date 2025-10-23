@@ -9,6 +9,9 @@ import {
   getLocalTileVideo,
   setTileAspectFromVideo,
   relayoutTilesForce,
+  dedupeTilesByPid,
+  cleanupOrphanDom,
+  removeTileByPid,
 } from "./tiles.js";
 import {
   Track,
@@ -468,10 +471,27 @@ export async function stopScreenShare(){
   }catch{}
   ctx.screenTracks = [];
   state.me.share = false;
-  if (ctx.room?.localParticipant) {
-    showAvatarInTile(ctx.room.localParticipant.identity+"#screen");
-  }
+  try{
+    const localId = ctx.room?.localParticipant?.identity;
+    if (localId){
+      // удаляем плитку «Экран» полностью
+      removeTileByPid(localId+"#screen");
+    }
+  }catch{}
+  // подчистим DOM и разложим заново
+  try{ dedupeTilesByPid(); cleanupOrphanDom(); }catch{}
   applyLayout();
+  // если камера была включена до начала шаринга — гарантируем её восстановление
+  try{
+    if (state.me._camWasOnBeforeShare){
+      if (!isCamActuallyOn()) await ensureCameraOn(true);
+      // переаттачим текущий локальный видеотрек в плитку
+      const vtrack = (camPub()?.track) || ctx.localVideoTrack;
+      const meId = ctx.room?.localParticipant?.identity;
+      if (vtrack && meId){ attachVideoToTile(vtrack, meId, true); }
+    }
+  }catch{}
+  try{ delete state.me._camWasOnBeforeShare; }catch{}
   window.dispatchEvent(new Event("app:refresh-ui"));
 }
 
@@ -482,6 +502,8 @@ async function onShareClick(){
   try{
     if(state.me.share){ await stopScreenShare(); }
     else {
+      // запомним состояние камеры до старта шаринга, чтобы восстановить после
+      try { state.me._camWasOnBeforeShare = isCamActuallyOn(); } catch {}
       const tracks = await createLocalScreenTracks({ audio:true });
       ctx.screenTracks = tracks;
       for(const t of tracks){ await ctx.room.localParticipant.publishTrack(t); }
