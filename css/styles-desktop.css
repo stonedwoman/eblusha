@@ -24,7 +24,7 @@ button,input,select,textarea{font:inherit}
 #screen-auth{display:grid; place-items:center; min-height:100vh; padding:32px}
 .auth-card{width:min(920px,100%); background:var(--bg2); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); display:grid; grid-template-columns:1.2fr 1fr}
 .auth-hero{padding:28px; border-right:1px solid var(--line); border-top-left-radius: 10px; background:linear-gradient(140deg, rgba(88,101,242,.25), transparent 50%), radial-gradient(1000px 400px at 10% -10%, rgba(255,255,255,.06), transparent 60%); display:flex; flex-direction:column; justify-content:center}
-.auth-hero h1{margin:0 0 8px; font-size:clamp(36px, 4.5vw, 64px); line-height:1.05}
+.auth-hero h1{margin:0 0 8px; font-size:clamp(36px, 4.5vw, 64px); line-height:1.05; align-self: center}
 .auth-hero p{margin:0; color:var(--muted); font-size:clamp(16px, 1.4vw, 22px); line-height:1.6}
 .auth-form{padding:28px}
 .field{margin-bottom:12px}
