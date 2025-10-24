@@ -291,20 +291,11 @@ export async function createAndPublishCameraTrack(constraints, { facing, showAva
   const pub0 = camPub();
   const oldTrack = pub0?.track || ctx.localVideoTrack || null;
 
-  // На мобильных устройствах камера эксклюзивна — сначала освобождаем старый трек
   const needPreRelease = isMobileView();
   if (needPreRelease && oldTrack){
-    try{
-      // Лёгкое очистить локальную плитку, но не тратить время на дедуп
-      if (showAvatarOnRelease){ try{ showAvatarInTile(localParticipantId()); }catch{} }
-      if (pub0){ try { await pub0.setMuted?.(true); } catch {} }
-      try { await ctx.room?.localParticipant?.unpublishTrack(oldTrack); } catch {}
-      try { oldTrack.stop?.(); } catch {}
-      await wait(CAMERA_RELEASE_DELAY_MS);
-    }catch{}
+    await releaseLocalCamera({ showAvatar: showAvatarOnRelease, unpublish: true });
   }
 
-  // Создаём новый трек
   const newTrack = await createLocalVideoTrack(constraints);
 
   let pub = camPub();
@@ -322,7 +313,6 @@ export async function createAndPublishCameraTrack(constraints, { facing, showAva
 
   finalizeLocalCameraTrack(newTrack, { facing });
 
-  // Если не делали pre-release, мягко остановим старый трек (после replace)
   if (!needPreRelease){ try { if (oldTrack && oldTrack !== newTrack) oldTrack.stop?.(); } catch {} }
 
   try { window.dispatchEvent(new Event('app:refresh-ui')); } catch {}
