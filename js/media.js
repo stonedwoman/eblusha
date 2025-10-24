@@ -435,52 +435,26 @@ export async function toggleCam(){
       const lp = ctx.room.localParticipant;
       const targetOn = !isCamActuallyOn();
       let pub = camPub();
+
       if (targetOn){
-        if (!pub){
-          try{
-            if (typeof lp?.setCameraEnabled === "function"){
-              await lp.setCameraEnabled(true, { videoCaptureDefaults:{ deviceId: (state.settings.camDevice||undefined) } });
-              pub = camPub();
-            }
-          }catch{}
+        const facing = state.settings.camFacing || "user";
+        const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
+        const constraints = preferredCamConstraints({ facingOverride: facing, deviceOverride: deviceId });
 
-          if (!pub?.track){
-            const facing = state.settings.camFacing || "user";
-            const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
-            const constraints = preferredCamConstraints({ facingOverride: facing, deviceOverride: deviceId });
-            await createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease: false });
-            pub = camPub();
-          }
+        if (!pub?.track || !isVideoTrackLive(pub.track)){
+          await createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease: false });
+          pub = camPub();
         } else {
-          if (typeof lp?.setCameraEnabled === "function"){ try{ await lp.setCameraEnabled(true); }catch{} }
-          if (typeof pub.unmute === "function")      await pub.unmute();
-          else if (typeof pub.setMuted === "function") await pub.setMuted(false);
-          else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
-
-          if (!pub.track || !isVideoTrackLive(pub.track)){
-            const facing = state.settings.camFacing || "user";
-            const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
-            const constraints = preferredCamConstraints({ facingOverride: facing, deviceOverride: deviceId });
-            await createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease: false });
-          } else {
-            finalizeLocalCameraTrack(pub.track, { facing: state.settings.camFacing });
-          }
+          try { await (pub.setMuted?.(false) || pub.unmute?.()); } catch {}
+          finalizeLocalCameraTrack(pub.track, { facing });
         }
+
         try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
       } else {
-        let turnedOff = false;
-        try{
-          if (typeof lp?.setCameraEnabled === "function"){
-            await lp.setCameraEnabled(false);
-            turnedOff = true;
-          }
-        }catch{}
-
-        if (!turnedOff){
-          if (pub?.track){
-            await releaseLocalCamera({ showAvatar: true, unpublish: true });
-          }
-        } else {
+        // Всегда отписываем и останавливаем трек — это надёжнее для всех платформ
+        if (pub?.track){
+          await releaseLocalCamera({ showAvatar: true, unpublish: true });
+        } else if (ctx.localVideoTrack){
           await releaseLocalCamera({ showAvatar: true, unpublish: false });
         }
         try{ ctx.localVideoTrack = null; }catch{}
