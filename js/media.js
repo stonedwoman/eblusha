@@ -288,12 +288,12 @@ export function finalizeLocalCameraTrack(track, { facing } = {}){
 }
 
 export async function createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease = true } = {}){
-  const existing = camPub()?.track || ctx.localVideoTrack;
-  if (existing && isVideoTrackLive(existing)){
-    await releaseLocalCamera({ showAvatar: showAvatarOnRelease, track: existing });
-  }
+  const pub0 = camPub();
+  const oldTrack = pub0?.track || ctx.localVideoTrack || null;
 
+  // Создаём новый трек ДО остановки старого, чтобы не гасить публикацию у удалённых
   const newTrack = await createLocalVideoTrack(constraints);
+
   let pub = camPub();
   if (pub){
     await pub.replaceTrack(newTrack);
@@ -308,6 +308,10 @@ export async function createAndPublishCameraTrack(constraints, { facing, showAva
   }
 
   finalizeLocalCameraTrack(newTrack, { facing });
+
+  // Теперь можно мягко остановить старый трек (если он отличен от нового)
+  try { if (oldTrack && oldTrack !== newTrack) oldTrack.stop?.(); } catch {}
+
   try { window.dispatchEvent(new Event('app:refresh-ui')); } catch {}
   return newTrack;
 }
