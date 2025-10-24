@@ -490,7 +490,9 @@ byId("btnCam")?.addEventListener("click", toggleCam);
 
 /* ===== Переключение фронт/тыл ===== */
 export async function toggleFacing(){
-  if(!ctx.room || !isCamActuallyOn() || camBusy) return;
+  if(!ctx.room || camBusy) return;
+  const cam = getCameraUiStatus();
+  if (!cam.live) return;
   camBusy = true;
   ctx._camSwitching = true;
   const btn = byId("btnFacing"); if (btn) btn.disabled = true;

@@ -206,11 +206,31 @@ const handleLocalTrackUnpublished = (publication, participant) => {
 const syncParticipantState = (participant) => {
   if (!participant) return;
   ensureParticipant(participant);
-  listPublications(participant).forEach((pub) => {
+  const pubs = listPublications(participant);
+  const seenVideoIds = new Set();
+  pubs.forEach((pub) => {
     ensurePublicationSubscribed(pub, participant);
     const track = pub?.track;
-    if (track) handleTrackSubscribed(track, pub, participant);
+    const isScreen = isScreenPublication(pub);
+    const tileId = makeTileId(participant, pub);
+    if (track) {
+      handleTrackSubscribed(track, pub, participant);
+      seenVideoIds.add(tileId);
+    } else {
+      // публикации нет реального трека — очистим тайл
+      showAvatarInTile(tileId);
+    }
   });
+  // Дополнительно пройдём по DOM и удалим тайлы, у которых нет живого видео и нет публикаций
+  try {
+    document.querySelectorAll(`.tile[data-pid^="${CSS.escape(participant.identity)}"]`).forEach((el)=>{
+      const pid = el.getAttribute('data-pid')||'';
+      const hasVid = !!el.querySelector('video');
+      if (!hasVid && !seenVideoIds.has(pid)) {
+        showAvatarInTile(pid);
+      }
+    });
+  } catch {}
 };
 
 const syncRoomState = (room) => {
