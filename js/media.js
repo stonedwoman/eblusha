@@ -492,7 +492,6 @@ byId("btnCam")?.addEventListener("click", toggleCam);
 export async function toggleFacing(){
   if(!ctx.room || camBusy) return;
   const cam = getCameraUiStatus();
-  if (!cam.live) return;
   camBusy = true;
   ctx._camSwitching = true;
   const btn = byId("btnFacing"); if (btn) btn.disabled = true;
@@ -502,8 +501,13 @@ export async function toggleFacing(){
 
   try{
     await runExclusiveCameraOp(async()=>{
+      // если камеры нет вовсе — включаем и выходим (следующее нажатие выполнит разворот)
+      const pub = camPub();
+      const hasTrackNow = !!(pub?.track || ctx.localVideoTrack);
+      if (!hasTrackNow){ await ensureCameraOn(true); return; }
+
       let restarted = false;
-      // На мобильных принудительно используем пересоздание — надёжнее, чем restartTrack
+      // На мобильных — пересоздание, на десктопе пробуем restartTrack → иначе пересоздание
       if (!isMobileView() && ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
         try{
           const v0 = getLocalTileVideo();
