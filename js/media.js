@@ -19,6 +19,11 @@ import {
   createLocalVideoTrack,
   createLocalScreenTracks,
 } from "./vendor/livekit-loader.js";
+import {
+  micPub, camPub, isCamActuallyOn,
+  preferredCamConstraints,
+  replaceCameraTrack,
+} from "./media.js";
 
 /* ===== Публикации (helpers) ===== */
 export function micPub(){
@@ -143,6 +148,11 @@ const CAMERA_RELEASE_DELAY_MS = 160;
 const LOCAL_VIDEO_STABILIZE_TICKS = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const isVideoTrackLive = (track) => {
+  const mst = track?.mediaStreamTrack;
+  return !!mst && mst.readyState === "live";
+};
+
 function localParticipantId(){
   return ctx.room?.localParticipant?.identity || "";
 }
@@ -174,9 +184,9 @@ export function preferredCamConstraints({ facingOverride, deviceOverride, includ
   };
 }
 
-export async function releaseLocalCamera({ showAvatar = true, unpublish = false } = {}){
+export async function releaseLocalCamera({ showAvatar = true, unpublish = false, track: trackOverride } = {}){
   const pub = camPub();
-  const track = pub?.track || ctx.localVideoTrack;
+  const track = trackOverride || pub?.track || ctx.localVideoTrack;
   const meId = localParticipantId();
 
   if (!track) return null;
@@ -185,19 +195,25 @@ export async function releaseLocalCamera({ showAvatar = true, unpublish = false 
     try { showAvatarInTile(meId); } catch {}
   }
 
-  if (pub){
+  if (pub && !trackOverride){
     try { await (pub.setMuted?.(true) || pub.mute?.()); } catch {}
     if (unpublish){
       try { await ctx.room?.localParticipant?.unpublishTrack(pub.track); } catch {}
     }
+  } else if (trackOverride && unpublish){
+    try { await ctx.room?.localParticipant?.unpublishTrack(trackOverride); } catch {}
   }
 
-  try { track.mediaStreamTrack?.stop?.(); } catch {}
-  try { track.stop?.(); } catch {}
+  if (track && isVideoTrackLive(track)){
+    try { track.stop?.(); } catch {}
+    try { track.mediaStreamTrack?.stop?.(); } catch {}
+  }
 
-  ctx.localVideoTrack = null;
+  if (!trackOverride){
+    ctx.localVideoTrack = null;
+  }
 
-  if (meId){
+  if (meId && !trackOverride){
     try { applyLayout(); } catch {}
   }
 
@@ -255,9 +271,9 @@ export function finalizeLocalCameraTrack(track, { facing } = {}){
 }
 
 export async function createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease = true } = {}){
-  const hadTrack = !!(camPub()?.track || ctx.localVideoTrack);
-  if (hadTrack){
-    await releaseLocalCamera({ showAvatar: showAvatarOnRelease });
+  const existing = camPub()?.track || ctx.localVideoTrack;
+  if (existing && isVideoTrackLive(existing)){
+    await releaseLocalCamera({ showAvatar: showAvatarOnRelease, track: existing });
   }
 
   const newTrack = await createLocalVideoTrack(constraints);
@@ -336,10 +352,15 @@ export async function ensureCameraOn(force=false){
       deviceOverride: deviceId,
     });
 
-    await createAndPublishCameraTrack(constraints, {
-      facing,
-      showAvatarOnRelease: false,
-    });
+    const existingPub = camPub();
+    if (existingPub?.track && isVideoTrackLive(existingPub.track)){
+      finalizeLocalCameraTrack(existingPub.track, { facing });
+    } else {
+      await createAndPublishCameraTrack(constraints, {
+        facing,
+        showAvatarOnRelease: false,
+      });
+    }
 
     try{ captureVideoPrefsFromTrack(ctx.localVideoTrack); }catch{}
   }catch(e){
@@ -411,11 +432,10 @@ export async function toggleCam(){
         try{
           if (typeof lp?.setCameraEnabled === "function"){
             await lp.setCameraEnabled(true, { videoCaptureDefaults:{ deviceId: (state.settings.camDevice||undefined) } });
-          } else {
-            await ensureCameraOn(true);
+            pub = camPub();
           }
         }catch{}
-        pub = camPub();
+
         if (!pub?.track){
           const facing = state.settings.camFacing || "user";
           const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
@@ -429,11 +449,13 @@ export async function toggleCam(){
         else if (typeof pub.setMuted === "function") await pub.setMuted(false);
         else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
 
-        if (!pub.track){
+        if (!pub.track || !isVideoTrackLive(pub.track)){
           const facing = state.settings.camFacing || "user";
           const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
           const constraints = preferredCamConstraints({ facingOverride: facing, deviceOverride: deviceId });
           await createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease: false });
+        } else {
+          finalizeLocalCameraTrack(pub.track, { facing: state.settings.camFacing });
         }
       }
       try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
@@ -441,25 +463,18 @@ export async function toggleCam(){
       // Выключение
       let turnedOff = false;
       try{
-        if (typeof lp?.setCameraEnabled === "function"){ await lp.setCameraEnabled(false); turnedOff = true; }
-      }catch{}
-      // Если LP-API не сработал — жёстко отписываем трек
-      pub = camPub();
-      if (!turnedOff){
-        if (pub){
-          try{
-            const track = pub.track;
-            if (track){
-              try{ await ctx.room?.localParticipant?.unpublishTrack(track); }catch{}
-              try{ track.stop?.(); }catch{}
-            }
-          }catch{}
-          try{
-            if (typeof pub.mute === "function")         await pub.mute();
-            else if (typeof pub.setMuted === "function") await pub.setMuted(true);
-            else if (pub.track?.setEnabled)              pub.track.setEnabled(false);
-          }catch{}
+        if (typeof lp?.setCameraEnabled === "function"){
+          await lp.setCameraEnabled(false);
+          turnedOff = true;
         }
+      }catch{}
+
+      if (!turnedOff){
+        if (pub?.track){
+          await releaseLocalCamera({ showAvatar: true, unpublish: true });
+        }
+      } else {
+        await releaseLocalCamera({ showAvatar: true, unpublish: false });
       }
       try{ ctx.localVideoTrack = null; }catch{}
       showAvatarInTile(lp.identity);
