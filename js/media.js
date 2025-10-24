@@ -503,7 +503,8 @@ export async function toggleFacing(){
   try{
     await runExclusiveCameraOp(async()=>{
       let restarted = false;
-      if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
+      // На мобильных принудительно используем пересоздание — надёжнее, чем restartTrack
+      if (!isMobileView() && ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
         try{
           const v0 = getLocalTileVideo();
           const tile0 = v0?.closest('.tile');
