@@ -244,6 +244,16 @@ const syncRoomState = (room) => {
       Object.values(participants || {}).forEach((p) => syncParticipantState(p));
     }
   } catch {}
+  // Очистим фантомные видео-тайлы: есть data-vid/класс has-video, но видео-элемент отсутствует
+  try{
+    document.querySelectorAll('.tile.has-video').forEach(el=>{
+      const hasEl = !!el.querySelector('video');
+      if (!hasEl){
+        const pid = el.getAttribute('data-pid')||'';
+        showAvatarInTile(pid);
+      }
+    });
+  }catch{}
   scheduleStageRefresh();
 };
 

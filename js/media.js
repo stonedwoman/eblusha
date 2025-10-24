@@ -502,6 +502,7 @@ export async function toggleFacing(){
 
   try{
     await runExclusiveCameraOp(async()=>{
+      let restarted = false;
       if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
         try{
           const v0 = getLocalTileVideo();
@@ -511,27 +512,32 @@ export async function toggleFacing(){
             tile0.dataset.freezeAr = String(ar0);
           }
         }catch{}
-        const base = { facingMode: nextFacing };
-        await ctx.localVideoTrack.restartTrack(base);
-        try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
-        state.settings.camFacing = nextFacing;
-        try{ state.settings.camMirror = (nextFacing === "user"); }catch{}
-        setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-        window.requestAnimationFrame(()=>{
-          const v = getLocalTileVideo();
-          if (v){
-            const tile = v.closest(".tile");
-            if (tile) tile.classList.toggle("portrait", v.videoHeight>v.videoWidth);
-            applyCamTransformsToLive();
-            const unfreeze = ()=>{ try{ delete tile.dataset.freezeAr; }catch{} };
-            setTimeout(unfreeze, 300);
-            setTimeout(unfreeze, 800);
-            setTimeout(unfreeze, 1600);
-          }
-        });
-        captureVideoPrefsFromTrack(ctx.localVideoTrack);
+        try{
+          const base = { facingMode: nextFacing };
+          await ctx.localVideoTrack.restartTrack(base);
+          restarted = true;
+        }catch{}
+        if (restarted){
+          try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
+          state.settings.camFacing = nextFacing;
+          try{ state.settings.camMirror = (nextFacing === "user"); }catch{}
+          setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+          window.requestAnimationFrame(()=>{
+            const v = getLocalTileVideo();
+            if (v){
+              const tile = v.closest(".tile");
+              if (tile) tile.classList.toggle("portrait", v.videoHeight>v.videoWidth);
+              applyCamTransformsToLive();
+              const unfreeze = ()=>{ try{ delete tile.dataset.freezeAr; }catch{} };
+              setTimeout(unfreeze, 300);
+              setTimeout(unfreeze, 800);
+              setTimeout(unfreeze, 1600);
+            }
+          });
+          captureVideoPrefsFromTrack(ctx.localVideoTrack);
+        }
       }
-      else {
+      if (!restarted){
         state.settings.camFacing = nextFacing;
         state.settings.camDevice = "";
         const picked = await pickCameraDevice(nextFacing);
