@@ -148,6 +148,15 @@ const isVideoTrackLive = (track) => {
   return !!mst && mst.readyState === "live";
 };
 
+let cameraOp = null;
+async function runExclusiveCameraOp(fn){
+  if (cameraOp){
+    try { await cameraOp; } catch {}
+  }
+  cameraOp = (async ()=>{ try { return await fn(); } finally { cameraOp = null; } })();
+  return cameraOp;
+}
+
 function localParticipantId(){
   return ctx.room?.localParticipant?.identity || "";
 }
@@ -340,24 +349,27 @@ export async function ensureCameraOn(force=false){
   if (camBusy && !force) return;
   camBusy = true;
   try{
-    const facing = state.settings.camFacing || "user";
-    const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
-    const constraints = preferredCamConstraints({
-      facingOverride: facing,
-      deviceOverride: deviceId,
-    });
-
-    const existingPub = camPub();
-    if (existingPub?.track && isVideoTrackLive(existingPub.track)){
-      finalizeLocalCameraTrack(existingPub.track, { facing });
-    } else {
-      await createAndPublishCameraTrack(constraints, {
-        facing,
-        showAvatarOnRelease: false,
+    await runExclusiveCameraOp(async()=>{
+      const facing = state.settings.camFacing || "user";
+      const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
+      const constraints = preferredCamConstraints({
+        facingOverride: facing,
+        deviceOverride: deviceId,
       });
-    }
 
-    try{ captureVideoPrefsFromTrack(ctx.localVideoTrack); }catch{}
+      const existingPub = camPub();
+      if (existingPub?.track && isVideoTrackLive(existingPub.track)){
+        try { await (existingPub.setMuted?.(false) || existingPub.unmute?.()); } catch {}
+        finalizeLocalCameraTrack(existingPub.track, { facing });
+      } else {
+        await createAndPublishCameraTrack(constraints, {
+          facing,
+          showAvatarOnRelease: false,
+        });
+      }
+
+      try{ captureVideoPrefsFromTrack(ctx.localVideoTrack); }catch{}
+    });
   }catch(e){
     alert("Не удалось включить камеру: "+(e?.message||e));
   } finally {
@@ -419,62 +431,63 @@ export async function toggleCam(){
   camBusy = true;
   byId("btnCam")?.setAttribute("disabled","true");
   try{
-    const lp = ctx.room.localParticipant;
-    const targetOn = !isCamActuallyOn();
-    let pub = camPub();
-    if (targetOn){
-      if (!pub){
+    await runExclusiveCameraOp(async()=>{
+      const lp = ctx.room.localParticipant;
+      const targetOn = !isCamActuallyOn();
+      let pub = camPub();
+      if (targetOn){
+        if (!pub){
+          try{
+            if (typeof lp?.setCameraEnabled === "function"){
+              await lp.setCameraEnabled(true, { videoCaptureDefaults:{ deviceId: (state.settings.camDevice||undefined) } });
+              pub = camPub();
+            }
+          }catch{}
+
+          if (!pub?.track){
+            const facing = state.settings.camFacing || "user";
+            const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
+            const constraints = preferredCamConstraints({ facingOverride: facing, deviceOverride: deviceId });
+            await createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease: false });
+            pub = camPub();
+          }
+        } else {
+          if (typeof lp?.setCameraEnabled === "function"){ try{ await lp.setCameraEnabled(true); }catch{} }
+          if (typeof pub.unmute === "function")      await pub.unmute();
+          else if (typeof pub.setMuted === "function") await pub.setMuted(false);
+          else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
+
+          if (!pub.track || !isVideoTrackLive(pub.track)){
+            const facing = state.settings.camFacing || "user";
+            const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
+            const constraints = preferredCamConstraints({ facingOverride: facing, deviceOverride: deviceId });
+            await createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease: false });
+          } else {
+            finalizeLocalCameraTrack(pub.track, { facing: state.settings.camFacing });
+          }
+        }
+        try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
+      } else {
+        let turnedOff = false;
         try{
           if (typeof lp?.setCameraEnabled === "function"){
-            await lp.setCameraEnabled(true, { videoCaptureDefaults:{ deviceId: (state.settings.camDevice||undefined) } });
-            pub = camPub();
+            await lp.setCameraEnabled(false);
+            turnedOff = true;
           }
         }catch{}
 
-        if (!pub?.track){
-          const facing = state.settings.camFacing || "user";
-          const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
-          const constraints = preferredCamConstraints({ facingOverride: facing, deviceOverride: deviceId });
-          await createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease: false });
-          pub = camPub();
-        }
-      } else {
-        if (typeof lp?.setCameraEnabled === "function"){ try{ await lp.setCameraEnabled(true); }catch{} }
-        if (typeof pub.unmute === "function")      await pub.unmute();
-        else if (typeof pub.setMuted === "function") await pub.setMuted(false);
-        else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
-
-        if (!pub.track || !isVideoTrackLive(pub.track)){
-          const facing = state.settings.camFacing || "user";
-          const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
-          const constraints = preferredCamConstraints({ facingOverride: facing, deviceOverride: deviceId });
-          await createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease: false });
+        if (!turnedOff){
+          if (pub?.track){
+            await releaseLocalCamera({ showAvatar: true, unpublish: true });
+          }
         } else {
-          finalizeLocalCameraTrack(pub.track, { facing: state.settings.camFacing });
+          await releaseLocalCamera({ showAvatar: true, unpublish: false });
         }
+        try{ ctx.localVideoTrack = null; }catch{}
+        showAvatarInTile(lp.identity);
       }
-      try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
-    } else {
-      // Выключение
-      let turnedOff = false;
-      try{
-        if (typeof lp?.setCameraEnabled === "function"){
-          await lp.setCameraEnabled(false);
-          turnedOff = true;
-        }
-      }catch{}
-
-      if (!turnedOff){
-        if (pub?.track){
-          await releaseLocalCamera({ showAvatar: true, unpublish: true });
-        }
-      } else {
-        await releaseLocalCamera({ showAvatar: true, unpublish: false });
-      }
-      try{ ctx.localVideoTrack = null; }catch{}
-      showAvatarInTile(lp.identity);
-    }
-    applyLayout();
+      applyLayout();
+    });
   }catch(e){
     alert("Ошибка камеры: "+(e?.message||e));
   }finally{
@@ -488,7 +501,6 @@ byId("btnCam")?.addEventListener("click", toggleCam);
 /* ===== Переключение фронт/тыл ===== */
 export async function toggleFacing(){
   if(!ctx.room || !isCamActuallyOn() || camBusy) return;
-  // не ограничиваемся числом камер: многие мобильные отдают 1 device, но поддерживают facingMode
   camBusy = true;
   ctx._camSwitching = true;
   const btn = byId("btnFacing"); if (btn) btn.disabled = true;
@@ -497,55 +509,54 @@ export async function toggleFacing(){
   const nextFacing = prevFacing === "user" ? "environment" : "user";
 
   try{
-    // 1) мягкий путь — restartTrack, если есть
-    if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
-      try{
-        const v0 = getLocalTileVideo();
-        const tile0 = v0?.closest('.tile');
-        if (v0 && tile0){
-          const ar0 = (v0.videoWidth>0 && v0.videoHeight>0) ? (v0.videoWidth/v0.videoHeight) : (tile0.classList.contains('portrait')? (9/16):(16/9));
-          tile0.dataset.freezeAr = String(ar0);
-        }
-      }catch{}
-      const base = { facingMode: nextFacing };
-      await ctx.localVideoTrack.restartTrack(base);
-      try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
-      state.settings.camFacing = nextFacing;
-      try{ state.settings.camMirror = (nextFacing === "user"); }catch{}
-      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-      window.requestAnimationFrame(()=>{
-        const v = getLocalTileVideo();
-        if (v){
-          const tile = v.closest(".tile");
-          if (tile) tile.classList.toggle("portrait", v.videoHeight>v.videoWidth);
-          applyCamTransformsToLive();
-          const unfreeze = ()=>{ try{ delete tile.dataset.freezeAr; }catch{} };
-          setTimeout(unfreeze, 300);
-          setTimeout(unfreeze, 800);
-          setTimeout(unfreeze, 1600);
-        }
-      });
-      captureVideoPrefsFromTrack(ctx.localVideoTrack);
-    }
-    // 2) (отключено) applyConstraints на исходном треке часто сбивает формат до 4:3 — пропускаем
-    // 3) Фолбэк — новый трек
-    else {
-      state.settings.camFacing = nextFacing;
-      state.settings.camDevice = "";
-      const picked = await pickCameraDevice(nextFacing);
-      const constraints = preferredCamConstraints({
-        facingOverride: nextFacing,
-        deviceOverride: picked,
-        includeLastPrefs: false,
-      });
+    await runExclusiveCameraOp(async()=>{
+      if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
+        try{
+          const v0 = getLocalTileVideo();
+          const tile0 = v0?.closest('.tile');
+          if (v0 && tile0){
+            const ar0 = (v0.videoWidth>0 && v0.videoHeight>0) ? (v0.videoWidth/v0.videoHeight) : (tile0.classList.contains('portrait')? (9/16):(16/9));
+            tile0.dataset.freezeAr = String(ar0);
+          }
+        }catch{}
+        const base = { facingMode: nextFacing };
+        await ctx.localVideoTrack.restartTrack(base);
+        try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
+        state.settings.camFacing = nextFacing;
+        try{ state.settings.camMirror = (nextFacing === "user"); }catch{}
+        setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+        window.requestAnimationFrame(()=>{
+          const v = getLocalTileVideo();
+          if (v){
+            const tile = v.closest(".tile");
+            if (tile) tile.classList.toggle("portrait", v.videoHeight>v.videoWidth);
+            applyCamTransformsToLive();
+            const unfreeze = ()=>{ try{ delete tile.dataset.freezeAr; }catch{} };
+            setTimeout(unfreeze, 300);
+            setTimeout(unfreeze, 800);
+            setTimeout(unfreeze, 1600);
+          }
+        });
+        captureVideoPrefsFromTrack(ctx.localVideoTrack);
+      }
+      else {
+        state.settings.camFacing = nextFacing;
+        state.settings.camDevice = "";
+        const picked = await pickCameraDevice(nextFacing);
+        const constraints = preferredCamConstraints({
+          facingOverride: nextFacing,
+          deviceOverride: picked,
+          includeLastPrefs: false,
+        });
 
-      await createAndPublishCameraTrack(constraints, {
-        facing: nextFacing,
-        showAvatarOnRelease: true,
-      });
-    }
+        await createAndPublishCameraTrack(constraints, {
+          facing: nextFacing,
+          showAvatarOnRelease: true,
+        });
+      }
 
-    applyLayout();
+      applyLayout();
+    });
   }catch(e){
     state.settings.camFacing = prevFacing;
     try{ state.settings.camMirror = (prevFacing === "user"); }catch{}
