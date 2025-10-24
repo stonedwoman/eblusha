@@ -19,11 +19,6 @@ import {
   createLocalVideoTrack,
   createLocalScreenTracks,
 } from "./vendor/livekit-loader.js";
-import {
-  micPub, camPub, isCamActuallyOn,
-  preferredCamConstraints,
-  replaceCameraTrack,
-} from "./media.js";
 
 /* ===== Публикации (helpers) ===== */
 export function micPub(){
