@@ -1,11 +1,12 @@
 import { byId, isMobileView } from "./utils.js";
 import { state } from "./state.js";
-import { isMicActuallyOn, isCamActuallyOn } from "./media.js";
+import { isMicActuallyOn, getCameraUiStatus } from "./media.js";
 
 /* ===== UI-кнопки (вид/состояния) ===== */
 export function refreshControls(){
   const mpOn = isMicActuallyOn();
-  const cpOn = isCamActuallyOn();
+  const cam = getCameraUiStatus();
+  const cpOn = cam.isOn;
   const shareOn = state.me.share===true || (isMobileView() && !!state.me._mobileRotateOpen);
 
   byId('btnMic').classList.toggle('active', mpOn);
@@ -13,7 +14,11 @@ export function refreshControls(){
   byId('btnShare').classList.toggle('active', shareOn);
 
   const facingBtn = byId('btnFacing');
-  if (facingBtn) facingBtn.hidden = !(isMobileView() && cpOn);
+  if (facingBtn){
+    // Показываем только если камера включена или есть публикация и мы в мобильном режиме
+    facingBtn.hidden = !(isMobileView() && (cpOn || cam.hasPublication));
+    facingBtn.disabled = !!cam.isSwitching;
+  }
 
   const shareBtn = byId('btnShare');
   if (shareBtn) shareBtn.hidden = isMobileView();

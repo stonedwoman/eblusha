@@ -124,18 +124,14 @@ byId("btnMic")?.addEventListener("click", toggleMic);
 
 /* ===== CAMERA ===== */
 export function isCamActuallyOn(){
-  // Сначала доверяем реальному треку публикации — это надёжнее,
-  // т.к. мы можем включать/выключать камеру не через setCameraEnabled
+  // Надёжная проверка: публикация + живой медиатрек + не muted
   const pub = camPub();
-  if (pub){
-    const trackEnabled = (pub.track?.isEnabled !== false);
-    return pub.isMuted === false && trackEnabled;
-  }
-  // Фолбэк — API участника (может быть неточным, если не используем setCameraEnabled)
-  const lp = ctx.room?.localParticipant;
-  if (lp && typeof lp.isCameraEnabled === "boolean") return lp.isCameraEnabled;
-  if (lp && typeof lp.isCameraEnabled === "function") { try { return !!lp.isCameraEnabled(); } catch {} }
-  return false;
+  const track = pub?.track;
+  if (!pub || !track) return false;
+  const mst = track.mediaStreamTrack;
+  const live = !!mst && mst.readyState === "live";
+  const enabled = (track.isEnabled !== false);
+  return pub.isMuted === false && enabled && live;
 }
 let camBusy = false;
 
@@ -188,6 +184,19 @@ export function preferredCamConstraints({ facingOverride, deviceOverride, includ
   };
 }
 
+export function getCameraUiStatus(){
+  const pub = camPub();
+  const track = pub?.track || ctx.localVideoTrack || null;
+  const live = !!track && isVideoTrackLive(track);
+  const enabled = !!track && (track.isEnabled !== false);
+  const mutedProp = pub?.isMuted;
+  const isMuted = (mutedProp === true); // только true означает muted, иначе считаем не muted
+  const isOn = (!!track && live && enabled && !isMuted) || (!!track && live && enabled && mutedProp === undefined);
+  const hasPublication = !!pub;
+  const isSwitching = !!ctx._camSwitching;
+  return { isOn, hasPublication, live, isMuted, isSwitching };
+}
+
 export async function releaseLocalCamera({ showAvatar = true, unpublish = false, track: trackOverride } = {}){
   const pub = camPub();
   const track = trackOverride || pub?.track || ctx.localVideoTrack;
@@ -221,7 +230,10 @@ export async function releaseLocalCamera({ showAvatar = true, unpublish = false,
     try { applyLayout(); } catch {}
   }
 
+  // Сразу обновим UI (снимет "активность" кнопки камеры)
+  try { window.dispatchEvent(new Event('app:refresh-ui')); } catch {}
   await wait(CAMERA_RELEASE_DELAY_MS);
+  try { window.dispatchEvent(new Event('app:refresh-ui')); } catch {}
   return pub;
 }
 
@@ -259,6 +271,7 @@ export function finalizeLocalCameraTrack(track, { facing } = {}){
   window.requestAnimationFrame(()=>{
     applyCamTransformsToLive();
     captureVideoPrefsFromTrack(track);
+    try { window.dispatchEvent(new Event('app:refresh-ui')); } catch {}
   });
 
   setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
@@ -290,10 +303,12 @@ export async function createAndPublishCameraTrack(constraints, { facing, showAva
     if (lp){
       await lp.publishTrack(newTrack, { source: Track.Source.Camera });
       pub = camPub();
+      try { await (pub?.setMuted?.(false) || pub?.unmute?.()); } catch {}
     }
   }
 
   finalizeLocalCameraTrack(newTrack, { facing });
+  try { window.dispatchEvent(new Event('app:refresh-ui')); } catch {}
   return newTrack;
 }
 
@@ -433,7 +448,8 @@ export async function toggleCam(){
   try{
     await runExclusiveCameraOp(async()=>{
       const lp = ctx.room.localParticipant;
-      const targetOn = !isCamActuallyOn();
+      const cam = getCameraUiStatus();
+      const targetOn = !cam.isOn;
       let pub = camPub();
 
       if (targetOn){
@@ -451,7 +467,6 @@ export async function toggleCam(){
 
         try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
       } else {
-        // Всегда отписываем и останавливаем трек — это надёжнее для всех платформ
         if (pub?.track){
           await releaseLocalCamera({ showAvatar: true, unpublish: true });
         } else if (ctx.localVideoTrack){
@@ -461,13 +476,14 @@ export async function toggleCam(){
         showAvatarInTile(lp.identity);
       }
       applyLayout();
+      try { window.dispatchEvent(new Event('app:refresh-ui')); } catch {}
     });
   }catch(e){
     alert("Ошибка камеры: "+(e?.message||e));
   }finally{
     camBusy = false;
     byId("btnCam")?.removeAttribute("disabled");
-    window.dispatchEvent(new Event("app:refresh-ui"));
+    try { window.dispatchEvent(new Event('app:refresh-ui')); } catch {}
   }
 }
 byId("btnCam")?.addEventListener("click", toggleCam);
@@ -530,6 +546,7 @@ export async function toggleFacing(){
       }
 
       applyLayout();
+      try { window.dispatchEvent(new Event('app:refresh-ui')); } catch {}
     });
   }catch(e){
     state.settings.camFacing = prevFacing;
@@ -540,7 +557,7 @@ export async function toggleFacing(){
     camBusy = false;
     if (btn) btn.disabled = false;
     setTimeout(()=>{ ctx._camSwitching = false; }, 400);
-    window.dispatchEvent(new Event("app:refresh-ui"));
+    try { window.dispatchEvent(new Event('app:refresh-ui')); } catch {}
   }
 }
 byId("btnFacing")?.addEventListener("click", toggleFacing);
