@@ -139,6 +139,148 @@ export function isCamActuallyOn(){
 }
 let camBusy = false;
 
+const CAMERA_RELEASE_DELAY_MS = 160;
+const LOCAL_VIDEO_STABILIZE_TICKS = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function localParticipantId(){
+  return ctx.room?.localParticipant?.identity || "";
+}
+
+export function preferredCamConstraints({ facingOverride, deviceOverride, includeLastPrefs = true } = {}){
+  const facing = facingOverride || state.settings.camFacing || "user";
+  let deviceId;
+  if (deviceOverride !== undefined){
+    deviceId = deviceOverride || "";
+  } else {
+    deviceId = state.settings.camDevice || "";
+  }
+  const base = deviceId
+    ? { deviceId: { exact: deviceId } }
+    : { facingMode: { ideal: facing } };
+
+  if (!includeLastPrefs) return base;
+
+  const last = ctx.lastVideoPrefs || {};
+  const arIdeal = (typeof last.aspectRatio === "number" && last.aspectRatio > 0)
+    ? last.aspectRatio
+    : 16/9;
+
+  return {
+    ...base,
+    aspectRatio: { ideal: arIdeal },
+    ...(last.width  ? { width:  { ideal: last.width  } } : {}),
+    ...(last.height ? { height: { ideal: last.height } } : {}),
+  };
+}
+
+export async function releaseLocalCamera({ showAvatar = true, unpublish = false } = {}){
+  const pub = camPub();
+  const track = pub?.track || ctx.localVideoTrack;
+  const meId = localParticipantId();
+
+  if (!track) return null;
+
+  if (showAvatar && meId){
+    try { showAvatarInTile(meId); } catch {}
+  }
+
+  if (pub){
+    try { await (pub.setMuted?.(true) || pub.mute?.()); } catch {}
+    if (unpublish){
+      try { await ctx.room?.localParticipant?.unpublishTrack(pub.track); } catch {}
+    }
+  }
+
+  try { track.mediaStreamTrack?.stop?.(); } catch {}
+  try { track.stop?.(); } catch {}
+
+  ctx.localVideoTrack = null;
+
+  if (meId){
+    try { applyLayout(); } catch {}
+  }
+
+  await wait(CAMERA_RELEASE_DELAY_MS);
+  return pub;
+}
+
+function captureVideoPrefsFromTrack(track){
+  try{
+    const mst = track?.mediaStreamTrack;
+    const settings = mst?.getSettings?.() || {};
+    const v = getLocalTileVideo();
+    const width = (settings.width|0) || (v?.videoWidth|0) || 0;
+    const height = (settings.height|0) || (v?.videoHeight|0) || 0;
+    const aspect = (width>0 && height>0) ? (width/height)
+      : (v && v.videoWidth>0 && v.videoHeight>0 ? (v.videoWidth/v.videoHeight) : undefined);
+    ctx.lastVideoPrefs = {
+      width: width || undefined,
+      height: height || undefined,
+      aspectRatio: aspect || ctx.lastVideoPrefs?.aspectRatio || undefined,
+    };
+  }catch{}
+}
+
+export function finalizeLocalCameraTrack(track, { facing } = {}){
+  const meId = localParticipantId();
+  ctx.localVideoTrack = track;
+
+  if (facing) {
+    try { state.settings.camFacing = facing; } catch {}
+  }
+  const facingMode = state.settings.camFacing || "user";
+  try { state.settings.camMirror = (facingMode === "user"); } catch {}
+
+  if (meId){
+    attachVideoToTile(track, meId, true);
+  }
+
+  window.requestAnimationFrame(()=>{
+    applyCamTransformsToLive();
+    captureVideoPrefsFromTrack(track);
+  });
+
+  setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
+
+  const arTick = ()=>{
+    const v = getLocalTileVideo(); if (!v) return;
+    const tile = v.closest('.tile');
+    if (tile){
+      setTileAspectFromVideo(tile, v);
+      relayoutTilesForce();
+    }
+  };
+  LOCAL_VIDEO_STABILIZE_TICKS.forEach(ms=> setTimeout(arTick, ms));
+}
+
+export async function createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease = true } = {}){
+  const hadTrack = !!(camPub()?.track || ctx.localVideoTrack);
+  if (hadTrack){
+    await releaseLocalCamera({ showAvatar: showAvatarOnRelease });
+  }
+
+  const newTrack = await createLocalVideoTrack(constraints);
+  let pub = camPub();
+  if (pub){
+    await pub.replaceTrack(newTrack);
+    await (pub.setMuted?.(false) || pub.unmute?.());
+  } else {
+    const lp = ctx.room?.localParticipant;
+    if (lp){
+      await lp.publishTrack(newTrack, { source: Track.Source.Camera });
+      pub = camPub();
+    }
+  }
+
+  finalizeLocalCameraTrack(newTrack, { facing });
+  return newTrack;
+}
+
+export async function replaceCameraTrack(constraints, options = {}){
+  return createAndPublishCameraTrack(constraints, options);
+}
+
 async function countVideoInputs(){
   try{
     const devs = await navigator.mediaDevices.enumerateDevices();
@@ -184,60 +326,22 @@ export async function pickCameraDevice(facing){
 
 export async function ensureCameraOn(force=false){
   if (!ctx.room) return;
-  if (camBusy && !force) return; // защита от повторного входа/зацикливания
+  if (camBusy && !force) return;
   camBusy = true;
-  const lp = ctx.room?.localParticipant;
-  const devId = state.settings.camDevice || await pickCameraDevice(state.settings.camFacing||"user");
-
-  // Предпочтительный набор констрейнтов: устройство/фейсинг + сохранённые префы AR/размера
-  const base = devId
-    ? { deviceId: { exact: devId } }
-    : { facingMode: { ideal: state.settings.camFacing||"user" } };
-  const last = (ctx.lastVideoPrefs||{});
-  const arIdeal = (typeof last.aspectRatio === "number" && last.aspectRatio>0)
-    ? last.aspectRatio
-    : (16/9); // дефолтно просим 16:9, чтобы избежать 4:3
-  const constraints = {
-    ...base,
-    aspectRatio: { ideal: arIdeal },
-    ...(last.width  ? { width:  { ideal: last.width  } } : {}),
-    ...(last.height ? { height: { ideal: last.height } } : {}),
-  };
-  const old = ctx.localVideoTrack || camPub()?.track || null;
   try{
-    const newTrack = await createLocalVideoTrack(constraints);
-    const pub = camPub();
-    if (pub){
-      await pub.replaceTrack(newTrack);
-      await (pub.setMuted?.(false) || pub.unmute?.());
-    } else {
-      await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
-    }
-    try { old?.stop?.(); } catch {}
-    ctx.localVideoTrack = newTrack;
-    // auto-mirror based on facing
-    try{
-      const facing = state.settings.camFacing || "user";
-      state.settings.camMirror = (facing === "user");
-    }catch{}
-    // Зафиксировать 16:9/текущий AR для будущих рестартов
-    try{
-      const v = getLocalTileVideo();
-      const w = v?.videoWidth|0, h = v?.videoHeight|0;
-      const ar = (w>0 && h>0) ? (w/h) : (ctx.lastVideoPrefs?.aspectRatio || (16/9));
-      ctx.lastVideoPrefs = { width: w||undefined, height: h||undefined, aspectRatio: ar };
-    }catch{}
-    attachVideoToTile(newTrack, ctx.room.localParticipant.identity, true);
-    window.requestAnimationFrame(applyCamTransformsToLive);
-    setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-    const arTick = ()=>{
-      const v = getLocalTileVideo();
-      if (!v) return;
-      const tile = v.closest('.tile');
-      if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
-    };
-    const ticks = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
-    ticks.forEach(ms=> setTimeout(arTick, ms));
+    const facing = state.settings.camFacing || "user";
+    const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
+    const constraints = preferredCamConstraints({
+      facingOverride: facing,
+      deviceOverride: deviceId,
+    });
+
+    await createAndPublishCameraTrack(constraints, {
+      facing,
+      showAvatarOnRelease: false,
+    });
+
+    try{ captureVideoPrefsFromTrack(ctx.localVideoTrack); }catch{}
   }catch(e){
     alert("Не удалось включить камеру: "+(e?.message||e));
   } finally {
@@ -303,7 +407,6 @@ export async function toggleCam(){
     const targetOn = !isCamActuallyOn();
     let pub = camPub();
     if (targetOn){
-      // Включение
       if (!pub){
         try{
           if (typeof lp?.setCameraEnabled === "function"){
@@ -313,13 +416,26 @@ export async function toggleCam(){
           }
         }catch{}
         pub = camPub();
+        if (!pub?.track){
+          const facing = state.settings.camFacing || "user";
+          const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
+          const constraints = preferredCamConstraints({ facingOverride: facing, deviceOverride: deviceId });
+          await createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease: false });
+          pub = camPub();
+        }
       } else {
         if (typeof lp?.setCameraEnabled === "function"){ try{ await lp.setCameraEnabled(true); }catch{} }
         if (typeof pub.unmute === "function")      await pub.unmute();
         else if (typeof pub.setMuted === "function") await pub.setMuted(false);
         else if (pub.track?.setEnabled)              pub.track.setEnabled(true);
+
+        if (!pub.track){
+          const facing = state.settings.camFacing || "user";
+          const deviceId = state.settings.camDevice || await pickCameraDevice(facing);
+          const constraints = preferredCamConstraints({ facingOverride: facing, deviceOverride: deviceId });
+          await createAndPublishCameraTrack(constraints, { facing, showAvatarOnRelease: false });
+        }
       }
-      // auto-mirror based on current facing
       try{ state.settings.camMirror = ((state.settings.camFacing||"user") === "user"); }catch{}
     } else {
       // Выключение
@@ -373,7 +489,6 @@ export async function toggleFacing(){
   try{
     // 1) мягкий путь — restartTrack, если есть
     if (ctx.localVideoTrack && typeof ctx.localVideoTrack.restartTrack === "function"){
-      // freeze AR while switching
       try{
         const v0 = getLocalTileVideo();
         const tile0 = v0?.closest('.tile');
@@ -382,16 +497,11 @@ export async function toggleFacing(){
           tile0.dataset.freezeAr = String(ar0);
         }
       }catch{}
-      const prefs = captureCurrentVideoPrefs();
       const base = { facingMode: nextFacing };
-      // как в тесте — минимум констрейнтов при рестарте
-      await ctx.localVideoTrack.restartTrack({ facingMode: nextFacing });
-      // гарантируем, что паблиш не остался в mute
+      await ctx.localVideoTrack.restartTrack(base);
       try{ const p = camPub(); await (p?.setMuted?.(false) || p?.unmute?.()); }catch{}
       state.settings.camFacing = nextFacing;
-      // auto-mirror based on facing
       try{ state.settings.camMirror = (nextFacing === "user"); }catch{}
-      // дёрнем стабилизацию AR/раскладки как при замене трека
       setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
       window.requestAnimationFrame(()=>{
         const v = getLocalTileVideo();
@@ -405,43 +515,24 @@ export async function toggleFacing(){
           setTimeout(unfreeze, 1600);
         }
       });
+      captureVideoPrefsFromTrack(ctx.localVideoTrack);
     }
     // 2) (отключено) applyConstraints на исходном треке часто сбивает формат до 4:3 — пропускаем
     // 3) Фолбэк — новый трек
     else {
       state.settings.camFacing = nextFacing;
-      state.settings.camDevice = ""; // дать браузеру выбрать
-
+      state.settings.camDevice = "";
       const picked = await pickCameraDevice(nextFacing);
-      // Минимальные констрейнты, как в тесте: только deviceId или facingMode
-      const constraints = picked ? { deviceId: { exact: picked } }
-                                 : { facingMode: { ideal: nextFacing } };
-      const newTrack = await createLocalVideoTrack(constraints);
-      const meId = ctx.room.localParticipant.identity;
-      const pub = camPub();
+      const constraints = preferredCamConstraints({
+        facingOverride: nextFacing,
+        deviceOverride: picked,
+        includeLastPrefs: false,
+      });
 
-      attachVideoToTile(newTrack, meId, true);
-
-      if (pub) {
-        await pub.replaceTrack(newTrack);
-        try { ctx.localVideoTrack?.stop(); } catch {}
-        try{ await (pub.setMuted?.(false) || pub.unmute?.()); }catch{}
-      } else {
-        await ctx.room.localParticipant.publishTrack(newTrack, { source: Track.Source.Camera });
-      }
-
-      ctx.localVideoTrack = newTrack;
-      applyCamTransformsToLive();
-      setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
-      // форс-обновление AR локального видео после смены facing
-      const arTick2 = ()=>{
-        const v = getLocalTileVideo();
-        if (!v) return;
-        const tile = v.closest('.tile');
-        if (tile){ setTileAspectFromVideo(tile, v); relayoutTilesForce(); }
-      };
-      const ticks2 = [80, 180, 320, 600, 1000, 1600, 2200, 2800];
-      ticks2.forEach(ms=> setTimeout(arTick2, ms));
+      await createAndPublishCameraTrack(constraints, {
+        facing: nextFacing,
+        showAvatarOnRelease: true,
+      });
     }
 
     applyLayout();

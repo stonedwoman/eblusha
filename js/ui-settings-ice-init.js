@@ -5,6 +5,8 @@ import { applyCamTransformsToLive } from "./tiles.js";
 import { setShareButtonMode, refreshControls } from "./controls.js";
 import {
   micPub, camPub, isCamActuallyOn,
+  preferredCamConstraints,
+  replaceCameraTrack,
 } from "./media.js";
 import {
   createLocalAudioTrack,
@@ -125,19 +127,17 @@ export async function applySettingsFromModal(closeAfter){
     const cp = camPub();
     if (cp && isCamActuallyOn()){
       const devId = state.settings.camDevice || null;
-      const constraints = devId
-        ? { deviceId:{ exact: devId } }
-        : { facingMode: { ideal: state.settings.camFacing||"user" } };
-      const oldV = ctx.localVideoTrack || cp.track;
-      const newCam = await createLocalVideoTrack(constraints);
-      await cp.replaceTrack(newCam);
-      await (cp.setMuted?.(false) || cp.unmute?.());
-      try{ oldV?.stop?.(); }catch{}
-      ctx.localVideoTrack=newCam;
-      // локальная плитка
+      const constraints = preferredCamConstraints({
+        deviceOverride: devId,
+        facingOverride: state.settings.camFacing,
+        includeLastPrefs: false,
+      });
+      await replaceCameraTrack(constraints, {
+        facing: state.settings.camFacing,
+        showAvatarOnRelease: false,
+      });
       applyCamTransformsToLive();
       applyLayout();
-      // Старт стабильной перераскладки, чтобы формат соответствовал реальному потоку
       setTimeout(()=> window.dispatchEvent(new Event('app:local-video-replaced')), 30);
     }
   }catch(e){ console.warn("cam replace error", e); }
